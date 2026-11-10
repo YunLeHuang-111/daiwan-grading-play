@@ -22,6 +22,7 @@ const keypad = get("keypad");
 const start = get("start");
 const submit = get("submit");
 const results = get("results");
+const tutorial = get("tutorial");
 const answerTypes = ["選擇題", "是非題"];
 let round;
 let paper;
@@ -32,6 +33,7 @@ let strokes = [];
 let activeStroke;
 let activePointer;
 let tool = "pen";
+let tutorialSeen = false;
 const clockDigits = get("clock-digits");
 const segmentPaths = ["M5 3h12", "M19 5v11", "M19 22v11", "M5 35h12", "M3 22v11", "M3 5v11", "M5 19h12"];
 const digitSegments = ["abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg"];
@@ -321,9 +323,14 @@ function clearInk() {
   updateControls();
 }
 
+ink.addEventListener("contextmenu", event => event.preventDefault());
 ink.addEventListener("pointerdown", event => {
-  if (phase !== "playing" || activeStroke || event.button !== 0) return;
   event.preventDefault();
+  if (phase !== "playing" || activeStroke || event.button !== 0 || !event.isPrimary) return;
+  const selection = window.getSelection();
+  if (selection?.anchorNode && ink.closest(".paper").contains(selection.anchorNode)) {
+    selection.removeAllRanges();
+  }
   ink.setPointerCapture(event.pointerId);
   activePointer = event.pointerId;
   activeStroke = { points: [point(event)], tool };
@@ -367,7 +374,21 @@ new ResizeObserver(([entry]) => {
   const height = entry.target.offsetHeight;
   document.body.style.setProperty("--grading-height", `${height}px`);
 }).observe(get("grading-tools"));
-start.addEventListener("click", startRound);
+function openTutorial(offerStart) {
+  get("tutorial-start").hidden = !offerStart;
+  tutorial.showModal();
+}
+
+start.addEventListener("click", () => {
+  if (tutorialSeen) startRound();
+  else openTutorial(true);
+});
+get("open-tutorial").addEventListener("click", () => openTutorial(phase === "ready"));
+get("tutorial-start").addEventListener("click", () => {
+  tutorialSeen = true;
+  tutorial.close();
+  startRound();
+});
 get("restart").addEventListener("click", startRound);
 submit.addEventListener("click", () => {
   if (submit.type === "button") {

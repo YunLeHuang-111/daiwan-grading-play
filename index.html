@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css?v=two-row-3">
+  <link rel="stylesheet" href="./style.css?v=campus-guide">
   <script src="./achievements.js" defer></script>
   <script src="./browser-game.js" defer></script>
-  <script src="./game.js?v=two-row" defer></script>
+  <script src="./game.js?v=campus-guide" defer></script>
 </head>
 <body>
   <main class="desk">
@@ -25,6 +25,10 @@
         <progress id="time-bar" max="60000" value="60000" aria-label="剩餘時間"></progress>
       </div>
     </header>
+    <div class="desk-actions" aria-label="遊戲資訊">
+      <button type="button" id="open-tutorial" class="desk-button" aria-haspopup="dialog">玩法教學</button>
+      <button type="button" class="achievement-button" data-open-achievements aria-haspopup="dialog"><span aria-hidden="true">★</span> 成就圖鑑 <strong id="achievement-total">0 / 150</strong></button>
+    </div>
     <aside class="grading" id="grading-tools" aria-label="閱卷工具">
       <div class="grading-top">
         <div class="pen-tools" aria-label="紅筆與橡皮擦">
@@ -38,7 +42,6 @@
           <button type="button" id="clear" aria-label="清除全部筆跡" disabled>清除</button>
         </div>
         <span class="grading-count">已改 <strong id="count">00</strong> 張</span>
-        <button type="button" class="achievement-button" data-open-achievements><span aria-hidden="true">★</span> 成就 <strong id="achievement-total">0 / 150</strong></button>
       </div>
       <div class="grading-body">
         <div class="score-controls">
@@ -115,6 +118,21 @@
       </tr></tbody>
     </table>
   </template>
+  <dialog id="tutorial" aria-labelledby="tutorial-title">
+    <p class="eyebrow">呆丸國中 ／ 閱卷小抄</p>
+    <h2 id="tutorial-title">老師，今天怎麼改？</h2>
+    <p class="tablet-tip"><strong>建議用平板遊玩。</strong> 直拿就能並排對照兩張卷，也可以用手指或手寫筆畫記。</p>
+    <ol class="tutorial-steps">
+      <li>開局會抽出國文、英文或數學。對照答案卷上的紅字和學生的藍字作答。</li>
+      <li>用紅筆在學生考卷上畫記，畫錯了可以用橡皮擦擦掉。</li>
+      <li>每題 10 分。用計分鍵盤填總分，按「下一張」就會交件。</li>
+    </ol>
+    <p>你有 60 秒。時間到後，會依交件張數和給分正確率結算。</p>
+    <div class="tutorial-actions">
+      <form method="dialog"><button type="submit" class="desk-button">關閉</button></form>
+      <button type="button" class="primary" id="tutorial-start">開始 60 秒 <span aria-hidden="true">→</span></button>
+    </div>
+  </dialog>
   <dialog id="results" aria-labelledby="result-title">
     <p class="eyebrow">閱卷鐘響 ／ 本局成績單</p>
     <h2 id="result-title"></h2>
