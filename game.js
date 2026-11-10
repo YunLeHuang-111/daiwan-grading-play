@@ -113,6 +113,7 @@ function renderPaper(nextPaper) {
 
 function updateControls() {
   const editable = phase === "playing";
+  document.body.classList.toggle("round-active", editable || phase === "submitting" || phase === "finishing");
   grade.disabled = !editable;
   submit.disabled = !editable;
   keypad.disabled = !editable;
@@ -173,8 +174,7 @@ get("grade-form").addEventListener("submit", async event => {
   }
   const score = Number(grade.value);
   if (!/^[0-9]{1,3}$/.test(grade.value) || score > 100) {
-    message("請填入 0 到 100 的整數。");
-    grade.focus();
+    message(grade.value ? "請填入 0 到 100 的整數。" : "請先填寫這張考卷的分數。");
     return;
   }
 
@@ -335,6 +335,10 @@ get("undo").addEventListener("click", () => {
 });
 get("clear").addEventListener("click", clearInk);
 new ResizeObserver(resizeInk).observe(ink);
+new ResizeObserver(([entry]) => {
+  const height = entry.target.offsetHeight;
+  document.body.style.setProperty("--grading-height", `${height}px`);
+}).observe(get("grading-tools"));
 start.addEventListener("click", startRound);
 get("restart").addEventListener("click", startRound);
 submit.addEventListener("click", () => {
@@ -346,9 +350,6 @@ submit.addEventListener("click", () => {
 results.addEventListener("cancel", event => event.preventDefault());
 
 for (const id of ["answer-key", "student-answers"]) renderExam(get(id), [], []);
-grade.addEventListener("invalid", () => {
-  message("請先填寫這張考卷的分數。");
-});
 grade.addEventListener("input", () => {
   setGrade(grade.value.replace(/[^0-9]/g, "").slice(0, 3));
   message();
