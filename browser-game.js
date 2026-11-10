@@ -1,6 +1,7 @@
 const browserGame = (() => {
   const names = ["林小宇", "陳羽安", "黃子晴", "張品睿", "李宥希", "王禹彤", "吳冠廷", "劉予樂", "蔡以恩", "許芷寧"];
   const questionsPerType = 5;
+  const perfectPaperCount = 12;
   let banks;
 
   async function loadBanks() {
@@ -55,7 +56,9 @@ const browserGame = (() => {
     const count = grades.length;
     const correct = grades.filter(({ entered, expected }) => entered === expected).length;
     const accuracy = count ? correct / count : 0;
-    const score = Math.round(100 * accuracy * (.4 + .6 * Math.min(count / 6, 1)));
+    const pace = Math.min(count / perfectPaperCount, 1);
+    const ceiling = count >= perfectPaperCount && correct === count ? 100 : 99;
+    const score = Math.min(ceiling, Math.round(100 * accuracy * accuracy * (.25 + .75 * pace)));
     const title = score >= 95 ? "教務處傳說" : score >= 80 ? "紅筆神手" :
       score >= 60 ? "資深導師" : score >= 30 ? "實習老師" : "改卷見習生";
     return { score, title, count, correct, accuracy: Math.round(accuracy * 100), grades };
