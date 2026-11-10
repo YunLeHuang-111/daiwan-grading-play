@@ -185,3 +185,10 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
   .paper-links { display: flex; grid-column: 1; grid-row: 2; flex-wrap: wrap; gap: 3px; }
   .paper-links a { padding: 4px; border: 1px solid #c2a77e; border-radius: 5px; background: #fff8e7; color: #483625; font-size: .7rem; font-weight: 750; text-decoration: none; }
 }
+@media (max-width: 360px) {
+  .grading-top { flex-wrap: wrap; }
+  .pen-tools button, .grading-top .achievement-button { padding-inline: 3px; font-size: .68rem; }
+  .pen-tools button svg { width: 24px; height: 24px; }
+  .grading-count { font-size: .64rem; }
+  .start-panel { padding-top: 10px; }
+}
