@@ -47,21 +47,21 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
 .intro p:last-child { margin: 8px 0 0; color: #36241b; font-size: .9rem; }
 .clock-card {
   width: 143px; flex: 0 0 auto; padding: 8px 12px;
-  border: 2px solid #9e7420; border-radius: 10px;
-  background: #d6a83f; color: #3d290b; box-shadow: 0 4px 0 #ab801e;
+  border: 2px solid #a75a51; border-radius: 10px;
+  background: #cb8175; color: #3f231f; box-shadow: 0 4px 0 #a46158;
 }
 .clock-label { display: block; margin-bottom: 4px; font: 750 .68rem/1.2 system-ui, sans-serif; letter-spacing: .16em; }
 #clock-digits {
-  display: block; width: 100%; padding: 5px 8px; border-radius: 4px; background: #3e2e15;
-  color: #ffe7a0; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; fill: none;
+  display: block; width: 100%; padding: 5px 8px; border-radius: 4px; background: #402a2a;
+  color: #fff0dc; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; fill: none;
 }
 #clock-digits .unlit { opacity: .12; }
-.clock-card.urgent #clock-digits { color: #ff997b; }
-#practice-clock { display: block; padding: 5px 0; border-radius: 4px; background: #3e2e15; color: #ffe7a0; text-align: center; font-size: .95rem; font-weight: 850; }
-progress { display: block; width: 100%; height: 3px; margin-top: 5px; appearance: none; border: 0; border-radius: 4px; overflow: hidden; background: #b98c2d; }
-progress::-webkit-progress-bar { background: #b98c2d; }
-progress::-webkit-progress-value { background: #5f4417; }
-progress::-moz-progress-bar { background: #5f4417; }
+.clock-card.urgent #clock-digits { color: #ffb5a8; }
+#practice-clock { display: block; padding: 5px 0; border-radius: 4px; background: #402a2a; color: #fff0dc; text-align: center; font-size: .95rem; font-weight: 850; }
+progress { display: block; width: 100%; height: 3px; margin-top: 5px; appearance: none; border: 0; border-radius: 4px; overflow: hidden; background: #b16c63; }
+progress::-webkit-progress-bar { background: #b16c63; }
+progress::-webkit-progress-value { background: #683b38; }
+progress::-moz-progress-bar { background: #683b38; }
 .workspace { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: start; }
 .sheet-pane { min-width: 0; scroll-margin-top: calc(var(--grading-height, 160px) + 10px); }
 .sheet-pane { container-type: inline-size; }
@@ -130,7 +130,7 @@ progress::-moz-progress-bar { background: #5f4417; }
 .lobby-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 13px; }
 .mode-buttons { display: flex; flex: 1; gap: 7px; }
 .mode-buttons button {
-  flex: 0 1 134px; min-width: 0; min-height: 51px; padding: 6px 8px;
+  flex: 0 1 126px; min-width: 0; min-height: 46px; padding: 5px 7px;
   border: 1px solid #b69b71; border-radius: 9px; background: #fff4d7;
   color: #3a2d24; box-shadow: 0 2px 0 #d0b286;
 }
@@ -310,7 +310,7 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
   #submit { grid-column: 3; grid-row: 2; min-height: 53px; }
   .lobby-tools { flex-wrap: wrap; gap: 5px; }
   .mode-buttons { flex-basis: 100%; }
-  .mode-buttons button { flex: 1; min-height: 47px; font-size: .88rem; }
+  .mode-buttons button { flex: 1; min-height: 44px; font-size: .88rem; }
   .desk-actions { margin-left: auto; }
   .desk-actions button { min-height: 29px; }
   .paper-links { display: flex; grid-column: 1; grid-row: 2; flex-wrap: wrap; gap: 3px; }
