@@ -120,7 +120,8 @@ progress::-moz-progress-bar { background: #517959; }
 .pen-tools button { white-space: nowrap; }
 .pen-tools button svg { display: block; width: 27px; height: 27px; }
 .pen-tools button[aria-pressed="true"] { background: #ffded5; border-color: #bc7066; }
-.grading-count { margin-left: auto; white-space: nowrap; font-size: .78rem; }
+.grading-count { margin-left: auto; white-space: nowrap; font-size: .95rem; }
+.grading-count strong { font-size: 1.12em; }
 .achievement-button { background: #fff1bb; white-space: nowrap; }
 .desk-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .desk-button { background: #fffaf0; }
@@ -141,7 +142,8 @@ progress::-moz-progress-bar { background: #517959; }
 #submit { min-height: 48px; padding-inline: 3px; font-size: .95rem; }
 .message { margin: 5px 0 0; padding: 4px 6px; border-radius: 4px; background: #fff5de; color: #872824; font-size: .81rem; }
 .paper-links { display: none; }
-.site-footer { display: flex; justify-content: space-between; gap: 8px; padding: 13px 0 17px; color: #38251c; font-size: .75rem; font-weight: 700; }
+.site-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 13px 0 17px; color: #38251c; font-size: .75rem; font-weight: 700; }
+.author-credit { white-space: nowrap; color: #27493b; }
 dialog { width: min(420px, calc(100% - 30px)); background: var(--cream); color: var(--ink); border: 1px solid #8e8067; border-radius: 8px; padding: 23px; }
 dialog::backdrop { background: #302016a6; }
 dialog h2 { color: var(--green); margin: 8px 0 0; }
@@ -186,7 +188,7 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
   .grading { padding-inline: 6px; }
   .grading-top { gap: 4px; }
   .pen-tools button, .achievement-button { padding-inline: 4px; }
-  .grading-count { font-size: .7rem; }
+  .grading-count { font-size: .9rem; }
   .grading-body { grid-template-columns: minmax(0, 1fr) 60px minmax(72px, auto); gap: 4px; }
   .keypad { grid-column: 1 / -1; grid-row: 1; }
   .score-controls { grid-column: 2; grid-row: 2; display: flex; gap: 3px; align-items: center; justify-content: space-between; }
@@ -199,6 +201,6 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
   .grading-top { flex-wrap: wrap; }
   .pen-tools button { padding-inline: 3px; font-size: .68rem; }
   .pen-tools button svg { width: 24px; height: 24px; }
-  .grading-count { font-size: .64rem; }
+  .grading-count { font-size: .82rem; }
   .start-panel { padding-top: 10px; }
 }
