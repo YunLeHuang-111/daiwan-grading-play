@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=two-row">
+  <script src="./achievements.js" defer></script>
   <script src="./browser-game.js" defer></script>
-  <script src="./game.js" defer></script>
+  <script src="./game.js?v=two-row" defer></script>
 </head>
 <body>
   <main class="desk">
@@ -19,16 +20,54 @@
       </div>
       <div class="clock-card" id="clock-card">
         <span class="clock-label">剩餘時間</span>
-        <strong id="clock">01:00</strong>
+        <strong id="clock" class="visually-hidden">01:00</strong>
+        <svg id="clock-digits" viewBox="0 0 116 38" aria-hidden="true"></svg>
         <progress id="time-bar" max="60000" value="60000" aria-label="剩餘時間"></progress>
       </div>
     </header>
-    <div class="ruler" aria-hidden="true"></div>
-    <nav class="paper-links" aria-label="跳到閱卷區">
-      <a href="#key-sheet">答案卷</a>
-      <a href="#student-sheet">學生考卷</a>
-      <a href="#grading-tools">計分鍵盤</a>
-    </nav>
+    <aside class="grading" id="grading-tools" aria-label="閱卷工具">
+      <div class="grading-top">
+        <div class="pen-tools" aria-label="紅筆與橡皮擦">
+          <button type="button" id="pen-tool" aria-label="紅筆" aria-pressed="true" disabled>
+            <svg viewBox="0 0 28 28" aria-hidden="true"><path fill="#a82c30" d="m4 18 14-14 6 6-14 14-7 1z"/><path fill="#f27165" d="m4 18 14-14 3 3L7 21z"/><path fill="#eac29f" d="m3 25 1-7 6 6z"/><path fill="#573138" d="m3 25 .5-3.2 2.7 2.7z"/></svg>
+          </button>
+          <button type="button" id="eraser-tool" aria-label="橡皮擦" aria-pressed="false" disabled>
+            <svg viewBox="0 0 28 28" aria-hidden="true"><path fill="#ef8f9d" stroke="#884855" stroke-width="1.3" d="m3 16 11-12q1-1 3 0l8 7q1 1 0 3L14 25H9l-6-6q-1-1 0-3Z"/><path fill="#fff1df" stroke="#884855" stroke-width="1.3" d="m8 10 12 11-6 4H9l-6-6q-1-1 0-3z"/></svg>
+          </button>
+          <button type="button" id="undo" disabled>復原</button>
+          <button type="button" id="clear" disabled>清除筆跡</button>
+        </div>
+        <span class="grading-count">已改 <strong id="count">00</strong> 張</span>
+        <button type="button" class="achievement-button" data-open-achievements><span aria-hidden="true">★</span> 成就 <strong id="achievement-total">0 / 150</strong></button>
+      </div>
+      <div class="grading-body">
+        <div class="score-controls">
+          <span class="calculator-label">得分</span>
+          <div class="score-screen" id="score-preview" aria-live="polite">—</div>
+        </div>
+        <fieldset class="keypad" id="keypad" disabled>
+          <legend class="visually-hidden">計分鍵盤</legend>
+          <button type="button" data-digit="1">1</button>
+          <button type="button" data-digit="2">2</button>
+          <button type="button" data-digit="3">3</button>
+          <button type="button" data-digit="4">4</button>
+          <button type="button" data-digit="5">5</button>
+          <button type="button" data-edit="back" aria-label="刪除最後一位數">⌫</button>
+          <button type="button" data-digit="6">6</button>
+          <button type="button" data-digit="7">7</button>
+          <button type="button" data-digit="8">8</button>
+          <button type="button" data-digit="9">9</button>
+          <button type="button" data-digit="0">0</button>
+          <button type="button" data-edit="clear" aria-label="清除分數">清空</button>
+        </fieldset>
+        <nav class="paper-links" aria-label="跳到考卷">
+          <a href="#student-sheet">學生考卷</a>
+          <a href="#key-sheet">答案卷</a>
+        </nav>
+        <button type="submit" form="grade-form" class="primary" id="submit" aria-label="交件並換下一張" disabled>下一張 <span aria-hidden="true">→</span></button>
+      </div>
+      <p class="message" id="message" role="status" hidden></p>
+    </aside>
     <div class="workspace" id="workspace">
       <section class="sheet-pane" id="key-sheet" aria-labelledby="key-title">
         <div class="pane-label">
@@ -60,41 +99,6 @@
           </div>
         </div>
       </section>
-      <aside class="grading" id="grading-tools" aria-labelledby="grading-title">
-        <div class="pane-label">
-          <h2 id="grading-title">閱卷工具</h2><span>已改 <strong id="count">00</strong> 張</span>
-        </div>
-        <div class="grading-body">
-          <div class="pen-tools" aria-label="紅筆工具">
-            <span class="pen-label"><span class="pen" aria-hidden="true"></span>紅筆</span>
-            <button type="button" id="undo" disabled>復原</button>
-            <button type="button" id="clear" disabled>清除</button>
-          </div>
-          <div class="calculator">
-            <div class="score-controls">
-              <p class="calculator-label">計分鍵盤</p>
-              <div class="score-screen" id="score-preview" aria-live="polite">—</div>
-            </div>
-            <fieldset class="keypad" id="keypad" disabled>
-              <legend class="visually-hidden">輸入分數</legend>
-              <button type="button" data-digit="1">1</button>
-              <button type="button" data-digit="2">2</button>
-              <button type="button" data-digit="3">3</button>
-              <button type="button" data-digit="4">4</button>
-              <button type="button" data-digit="5">5</button>
-              <button type="button" data-digit="6">6</button>
-              <button type="button" data-digit="7">7</button>
-              <button type="button" data-digit="8">8</button>
-              <button type="button" data-digit="9">9</button>
-              <button type="button" data-edit="clear" aria-label="清除分數">清除</button>
-              <button type="button" data-digit="0">0</button>
-              <button type="button" data-edit="back" aria-label="刪除最後一位數">⌫</button>
-            </fieldset>
-            <button type="submit" form="grade-form" class="primary" id="submit" disabled>交件・下一張 <span aria-hidden="true">→</span></button>
-          </div>
-          <p class="message" id="message" role="status" hidden></p>
-        </div>
-      </aside>
     </div>
     <footer class="site-footer"><span>呆丸國中教務處</span><span>每題 10 分 · 交卷後才計入成績</span></footer>
   </main>
@@ -118,7 +122,18 @@
     <p id="result-stats"></p>
     <p id="achievement"></p>
     <details id="review"><summary>查看每張考卷的分數</summary><ol id="grade-list"></ol></details>
+    <button type="button" class="achievement-button" data-open-achievements><span aria-hidden="true">★</span> 成就圖鑑</button>
     <button type="button" class="primary" id="restart">再改一輪 <span aria-hidden="true">→</span></button>
+  </dialog>
+  <dialog id="achievement-dialog" aria-labelledby="achievement-title">
+    <div class="collection-heading">
+      <div><p class="eyebrow">呆丸國中 ／ 閱卷紀錄</p><h2 id="achievement-title">成就圖鑑</h2></div>
+      <form method="dialog"><button type="submit" class="achievement-button">關閉</button></form>
+    </div>
+    <p id="collection-summary"></p>
+    <label for="achievement-category">成就分類</label>
+    <select id="achievement-category"></select>
+    <ol id="achievement-list" class="achievement-list"></ol>
   </dialog>
 </body>
 </html>

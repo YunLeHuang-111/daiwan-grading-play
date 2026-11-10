@@ -31,6 +31,24 @@ let phase = "ready";
 let strokes = [];
 let activeStroke;
 let activePointer;
+let tool = "pen";
+const clockDigits = get("clock-digits");
+const segmentPaths = ["M5 3h12", "M19 5v11", "M19 22v11", "M5 35h12", "M3 22v11", "M3 5v11", "M5 19h12"];
+const digitSegments = ["abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg"];
+const digitGroups = [0, 25, 69, 94].map(offset => {
+  const group = document.createElementNS(clockDigits.namespaceURI, "g");
+  group.setAttribute("transform", `translate(${offset} 0)`);
+  clockDigits.append(group);
+  return segmentPaths.map(path => {
+    const segment = document.createElementNS(clockDigits.namespaceURI, "path");
+    segment.setAttribute("d", path);
+    group.append(segment);
+    return segment;
+  });
+});
+const clockColon = document.createElementNS(clockDigits.namespaceURI, "path");
+clockColon.setAttribute("d", "M57 12h2m-2 14h2");
+clockDigits.append(clockColon);
 
 function message(text = "") {
   const status = get("message");
@@ -113,7 +131,7 @@ function renderPaper(nextPaper) {
 
 function updateControls() {
   const editable = phase === "playing";
-  document.body.classList.toggle("round-active", editable || phase === "submitting" || phase === "finishing");
+  get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
   grade.disabled = !editable;
   submit.disabled = !editable;
   keypad.disabled = !editable;
@@ -123,7 +141,17 @@ function updateControls() {
 
 function updateClock(ms) {
   const seconds = Math.ceil(ms / 1000);
-  get("clock").textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  const digits = String(Math.floor(seconds / 60)).padStart(2, "0") + String(seconds % 60).padStart(2, "0");
+  const clock = get("clock");
+  const time = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+  if (clock.textContent !== time || !digitGroups[0][0].hasAttribute("class")) {
+    clock.textContent = time;
+    digitGroups.forEach((segments, digit) => {
+      segments.forEach((segment, index) => {
+        segment.setAttribute("class", digitSegments[Number(digits[digit])].includes("abcdefg"[index]) ? "lit" : "unlit");
+      });
+    });
+  }
   get("time-bar").value = ms;
   get("clock-card").classList.toggle("urgent", seconds <= 10);
 }
@@ -147,6 +175,7 @@ async function startRound() {
     get("start-panel").hidden = true;
     ink.hidden = false;
     get("count").textContent = "00";
+    selectTool("pen");
     renderKey();
     renderPaper(round.paper);
     phase = "playing";
@@ -223,19 +252,6 @@ async function finish() {
   }
 }
 
-function recordAchievement(title) {
-  try {
-    const key = "daiwan-grading-achievements";
-    const unlocked = new Set(JSON.parse(localStorage.getItem(key) || "[]"));
-    const isNew = !unlocked.has(title);
-    unlocked.add(title);
-    localStorage.setItem(key, JSON.stringify([...unlocked]));
-    return `${isNew ? "新成就" : "已解鎖成就"}　${title}（${unlocked.size} / 5）`;
-  } catch {
-    return `本局成就　${title}`;
-  }
-}
-
 function showResults(data) {
   clearInterval(timer);
   phase = "finished";
@@ -243,12 +259,12 @@ function showResults(data) {
   updateClock(0);
   message();
   submit.type = "submit";
-  submit.textContent = "交件・下一張 →";
+  submit.textContent = "下一張 →";
   get("count").textContent = String(data.count).padStart(2, "0");
   get("result-title").textContent = data.title;
   get("rating").textContent = data.score;
   get("result-stats").textContent = `交件 ${data.count} 張・分數正確 ${data.correct} 張・正確率 ${data.accuracy}%`;
-  get("achievement").textContent = recordAchievement(data.title);
+  get("achievement").textContent = achievementBook.record(data, round.subject);
   const grades = get("grade-list");
   grades.replaceChildren();
   data.grades.forEach(({ number, entered, expected }) => {
@@ -274,13 +290,14 @@ function redrawInk() {
   const { width, height } = ink.getBoundingClientRect();
   ctx.clearRect(0, 0, width, height);
   ctx.strokeStyle = ctx.fillStyle = "#bb3028";
-  ctx.lineWidth = 2.7;
   ctx.lineCap = ctx.lineJoin = "round";
-  for (const points of strokes) {
+  for (const { points, tool: strokeTool } of strokes) {
+    ctx.globalCompositeOperation = strokeTool === "eraser" ? "destination-out" : "source-over";
+    ctx.lineWidth = strokeTool === "eraser" ? 22 : 2.7;
     ctx.beginPath();
     const [x, y] = points[0];
     if (points.length === 1) {
-      ctx.arc(x * width, y * height, 1.35, 0, Math.PI * 2);
+      ctx.arc(x * width, y * height, ctx.lineWidth / 2, 0, Math.PI * 2);
       ctx.fill();
       continue;
     }
@@ -288,6 +305,7 @@ function redrawInk() {
     for (const [px, py] of points.slice(1)) ctx.lineTo(px * width, py * height);
     ctx.stroke();
   }
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function point(event) {
@@ -308,7 +326,7 @@ ink.addEventListener("pointerdown", event => {
   event.preventDefault();
   ink.setPointerCapture(event.pointerId);
   activePointer = event.pointerId;
-  activeStroke = [point(event)];
+  activeStroke = { points: [point(event)], tool };
   strokes.push(activeStroke);
   redrawInk();
   updateControls();
@@ -316,7 +334,7 @@ ink.addEventListener("pointerdown", event => {
 ink.addEventListener("pointermove", event => {
   if (event.pointerId !== activePointer || phase !== "playing") return;
   const events = event.getCoalescedEvents?.();
-  for (const sample of events?.length ? events : [event]) activeStroke.push(point(sample));
+  for (const sample of events?.length ? events : [event]) activeStroke.points.push(point(sample));
   redrawInk();
 });
 for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
@@ -326,6 +344,16 @@ for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
     activePointer = undefined;
   });
 }
+function selectTool(nextTool) {
+  tool = nextTool;
+  ink.classList.toggle("eraser-active", tool === "eraser");
+  get("pen-tool").setAttribute("aria-pressed", String(tool === "pen"));
+  get("eraser-tool").setAttribute("aria-pressed", String(tool === "eraser"));
+}
+
+get("pen-tool").addEventListener("click", () => selectTool("pen"));
+get("eraser-tool").addEventListener("click", () => selectTool("eraser"));
+updateClock(60000);
 get("undo").addEventListener("click", () => {
   activeStroke = undefined;
   activePointer = undefined;
