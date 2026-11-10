@@ -266,7 +266,11 @@ function showResults(data) {
   get("result-title").textContent = data.title;
   get("rating").textContent = data.score;
   get("result-stats").textContent = `交件 ${data.count} 張・分數正確 ${data.correct} 張・正確率 ${data.accuracy}%`;
-  get("achievement").textContent = achievementBook.record(data, round.subject);
+  const { ending, isNew } = achievementBook.record(data, round.subject);
+  get("achievement").classList.toggle("new-ending", isNew);
+  get("ending-label").textContent = isNew ? "★ 新結局" : "本局結局・已收錄";
+  get("ending-title").textContent = ending.title;
+  get("ending-detail").textContent = `NO. ${ending.number} · ${ending.subject} · ${ending.rule}`;
   const grades = get("grade-list");
   grades.replaceChildren();
   data.grades.forEach(({ number, entered, expected }) => {

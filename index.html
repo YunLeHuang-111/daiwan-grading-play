@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css?v=campus-author">
-  <script src="./achievements.js" defer></script>
+  <link rel="stylesheet" href="./style.css?v=ending-book">
+  <script src="./achievements.js?v=ending-book" defer></script>
   <script src="./browser-game.js" defer></script>
-  <script src="./game.js?v=campus-guide" defer></script>
+  <script src="./game.js?v=ending-book" defer></script>
 </head>
 <body>
   <main class="desk">
@@ -123,15 +123,15 @@
     </table>
   </template>
   <dialog id="tutorial" aria-labelledby="tutorial-title">
-    <p class="eyebrow">呆丸國中 ／ 閱卷小抄</p>
+    <p class="eyebrow guide-label">呆丸國中 ／ 閱卷小抄</p>
     <h2 id="tutorial-title">老師，今天怎麼改？</h2>
     <p class="tablet-tip"><strong>建議用平板遊玩。</strong> 直拿就能並排對照兩張卷，也可以用手指或手寫筆畫記。</p>
     <ol class="tutorial-steps">
-      <li>開局會抽出國文、英文或數學。對照答案卷上的紅字和學生的藍字作答。</li>
-      <li>用紅筆在學生考卷上畫記，畫錯了可以用橡皮擦擦掉。</li>
-      <li>每題 10 分。用計分鍵盤填總分，按「下一張」就會交件。</li>
+      <li><strong>對答案</strong><span>開局會抽一科。比對答案卷的紅字與學生卷的藍字。</span></li>
+      <li><strong>畫紅筆</strong><span>在學生考卷上畫記，畫錯了可以用橡皮擦。</span></li>
+      <li><strong>給分交卷</strong><span>每題 10 分。填好總分，再按「下一張」交件。</span></li>
     </ol>
-    <p>你有 60 秒。時間到後，會依交件張數和給分正確率結算。</p>
+    <p class="guide-note"><strong>60 秒挑戰</strong>　科目、交件張數與給分正確率會決定本局結局。</p>
     <div class="tutorial-actions">
       <form method="dialog"><button type="submit" class="desk-button">關閉</button></form>
       <button type="button" class="primary" id="tutorial-start">開始 60 秒 <span aria-hidden="true">→</span></button>
@@ -139,10 +139,14 @@
   </dialog>
   <dialog id="results" aria-labelledby="result-title">
     <p class="eyebrow">閱卷鐘響 ／ 本局成績單</p>
-    <h2 id="result-title"></h2>
+    <h2 id="result-title" class="result-title"></h2>
     <p class="result-score"><strong id="rating"></strong><span>／ 100 分</span></p>
     <p id="result-stats"></p>
-    <p id="achievement"></p>
+    <section id="achievement" aria-label="本局結局">
+      <span id="ending-label"></span>
+      <h3 id="ending-title"></h3>
+      <p id="ending-detail"></p>
+    </section>
     <details id="review"><summary>查看每張考卷的分數</summary><ol id="grade-list"></ol></details>
     <button type="button" class="achievement-button" data-open-achievements><span aria-hidden="true">★</span> 成就圖鑑</button>
     <button type="button" class="primary" id="restart">再改一輪 <span aria-hidden="true">→</span></button>
@@ -152,9 +156,16 @@
       <div><p class="eyebrow">呆丸國中 ／ 閱卷紀錄</p><h2 id="achievement-title">成就圖鑑</h2></div>
       <form method="dialog"><button type="submit" class="achievement-button">關閉</button></form>
     </div>
-    <p id="collection-summary"></p>
-    <label for="achievement-category">成就分類</label>
-    <select id="achievement-category"></select>
+    <div class="collection-controls">
+      <div class="collection-meter">
+        <p id="collection-summary"></p>
+        <progress id="collection-progress" max="150" value="0" aria-label="結局收錄進度"></progress>
+      </div>
+      <label class="collection-filter" for="achievement-category">
+        <span>依科目查看</span>
+        <select id="achievement-category"></select>
+      </label>
+    </div>
     <ol id="achievement-list" class="achievement-list"></ol>
   </dialog>
 </body>
