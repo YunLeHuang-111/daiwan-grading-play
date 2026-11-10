@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css?v=whole-paper-ink">
-  <script src="./achievements.js?v=title-review" defer></script>
-  <script src="./browser-game.js?v=stricter-scoring" defer></script>
-  <script src="./game.js?v=subject-bank" defer></script>
+  <link rel="stylesheet" href="./style.css?v=three-modes">
+  <script src="./achievements.js?v=three-modes" defer></script>
+  <script src="./browser-game.js?v=three-modes" defer></script>
+  <script src="./game.js?v=three-modes" defer></script>
 </head>
 <body>
   <main class="desk" id="game-page">
@@ -26,9 +26,14 @@
         <progress id="time-bar" max="60000" value="60000" aria-label="剩餘時間"></progress>
       </div>
     </header>
+    <div class="mode-buttons" aria-label="選擇遊玩模式">
+      <button type="button" data-mode="timed" aria-haspopup="dialog"><strong>單科模式</strong><span>1 分鐘</span></button>
+      <button type="button" data-mode="multi" aria-haspopup="dialog"><strong>多科模式</strong><span>2 分鐘</span></button>
+      <button type="button" data-mode="practice" aria-haspopup="dialog"><strong>練習模式</strong><span>不限時</span></button>
+    </div>
     <div class="desk-actions" aria-label="遊戲資訊">
       <button type="button" id="open-tutorial" class="desk-button" aria-haspopup="dialog">玩法教學</button>
-      <button type="button" class="achievement-button" data-open-achievements aria-haspopup="dialog"><span aria-hidden="true">★</span> 成就圖鑑 <strong id="achievement-total">0 / 150</strong></button>
+      <button type="button" class="achievement-button" data-open-achievements aria-haspopup="dialog"><span aria-hidden="true">★</span> 成就圖鑑 <strong id="achievement-total">0 / 200</strong></button>
     </div>
     <aside class="grading" id="grading-tools" aria-label="閱卷工具">
       <div class="grading-top">
@@ -97,8 +102,7 @@
           <div class="paper-page">第 1 頁，共 1 頁</div>
           <div id="start-panel" class="start-panel">
             <h3>老師，準備好了嗎？</h3>
-            <p>抽一科，選擇你想玩的模式。</p>
-            <button type="button" class="primary" id="start">開始閱卷 <span aria-hidden="true">→</span></button>
+            <p>從上方選擇模式，開始改考卷。</p>
           </div>
         </div>
       </section>
@@ -122,14 +126,15 @@
     <h2 id="tutorial-title">老師，今天怎麼改？</h2>
     <p class="tablet-tip"><strong>建議用平板遊玩。</strong> 直拿就能並排對照兩張卷，也可以用手指或手寫筆畫記。</p>
     <ol class="tutorial-steps">
-      <li><strong>對答案</strong><span>開局會抽一科。比對答案卷的紅字與學生卷的藍字。</span></li>
+      <li><strong>對答案</strong><span>比對答案卷的紅字與學生卷的藍字。多科模式交卷後會換科。</span></li>
       <li><strong>畫紅筆</strong><span>在學生考卷上畫記，畫錯了可以用橡皮擦。</span></li>
       <li><strong>給分交卷</strong><span>每題 10 分。填好總分，再按「下一張」交件。</span></li>
     </ol>
     <fieldset class="mode-picker" id="mode-picker">
       <legend>選擇遊玩模式</legend>
-      <label><input type="radio" name="mode" value="timed" checked><span><strong>60 秒挑戰</strong><small>倒數結算，可收錄稱號。</small></span></label>
-      <label><input type="radio" name="mode" value="practice"><span><strong>不限時練習</strong><small>慢慢改，隨時結束看考卷。</small></span></label>
+      <label><input type="radio" name="mode" value="timed" checked><span><strong>單科模式</strong><small>1 分鐘改同一科。</small></span></label>
+      <label><input type="radio" name="mode" value="multi"><span><strong>多科模式</strong><small>2 分鐘，每張換科。</small></span></label>
+      <label><input type="radio" name="mode" value="practice"><span><strong>練習模式</strong><small>不限時，隨時結束。</small></span></label>
     </fieldset>
     <div class="tutorial-actions">
       <form method="dialog"><button type="submit" class="desk-button">關閉</button></form>
@@ -174,7 +179,7 @@
     <div class="collection-controls">
       <div class="collection-meter">
         <p id="collection-summary"></p>
-        <progress id="collection-progress" max="150" value="0" aria-label="結局收錄進度"></progress>
+        <progress id="collection-progress" max="200" value="0" aria-label="結局收錄進度"></progress>
       </div>
       <label class="collection-filter" for="achievement-category">
         <span>依結算風格查看</span>

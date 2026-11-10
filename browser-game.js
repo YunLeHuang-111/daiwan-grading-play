@@ -41,6 +41,18 @@ const browserGame = (() => {
   const pick = items => items[Math.floor(Math.random() * items.length)];
   let round;
 
+  function selectBank(bank) {
+    const questions = [...sampleQuestions(bank.choice), ...sampleQuestions(bank.trueFalse)];
+    round.subject = bank.subject;
+    round.key = questions.map(([, answer]) => answer);
+    round.prompts = questions.map(([prompt]) => prompt);
+  }
+
+  function exam() {
+    const { subject, key, prompts, paper } = round;
+    return { subject, key, prompts, paper };
+  }
+
   function nextPaper() {
     const probability = .35 + Math.random() * .62;
     const answers = round.key.map((answer, index) => {
@@ -56,8 +68,9 @@ const browserGame = (() => {
     const count = grades.length;
     const correct = grades.filter(({ entered, expected }) => entered === expected).length;
     const accuracy = count ? correct / count : 0;
-    const pace = Math.min(count / perfectPaperCount, 1);
-    const ceiling = count >= perfectPaperCount && correct === count ? 100 : 99;
+    const target = round.mode === "multi" ? perfectPaperCount * 2 : perfectPaperCount;
+    const pace = Math.min(count / target, 1);
+    const ceiling = count >= target && correct === count ? 100 : 99;
     const score = Math.min(ceiling, Math.round(100 * accuracy * accuracy * (.25 + .75 * pace)));
     const title = score >= 95 ? "教務處傳說" : score >= 80 ? "紅筆神手" :
       score >= 60 ? "資深導師" : score >= 30 ? "實習老師" : "改卷見習生";
@@ -66,21 +79,22 @@ const browserGame = (() => {
 
   return async (path, method, body) => {
     if (path === "start" && method === "POST") {
-      if (body && !["timed", "practice"].includes(body)) throw new Error("找不到此遊玩模式");
-      const practice = body === "practice";
-      const { subject, choice, trueFalse } = pick(await loadBanks());
-      const questions = [...sampleQuestions(choice), ...sampleQuestions(trueFalse)];
+      if (body && !["timed", "multi", "practice"].includes(body)) throw new Error("找不到此遊玩模式");
+      const mode = body || "timed";
+      const practice = mode === "practice";
+      const loaded = await loadBanks();
+      const remainingMs = practice ? null : mode === "multi" ? 120000 : 60000;
       round = {
         id: crypto.randomUUID(),
-        end: practice ? null : performance.now() + 60000,
+        end: practice ? null : performance.now() + remainingMs,
+        mode,
         practice,
         finished: false,
-        key: questions.map(([, answer]) => answer),
         grades: [],
       };
+      selectBank(pick(loaded));
       round.paper = nextPaper();
-      return { id: round.id, subject, key: round.key,
-        prompts: questions.map(([prompt]) => prompt), remainingMs: practice ? null : 60000, practice, paper: round.paper };
+      return { id: round.id, mode, remainingMs, practice, ...exam() };
     }
     const [id, action] = path.split("/");
     if (id !== round?.id) throw new Error("找不到這一局，請重新開始。");
@@ -101,7 +115,10 @@ const browserGame = (() => {
     if (number !== round.paper.number) throw new Error("這張考卷已交件，請重新開始。");
     const expected = 10 * round.paper.answers.filter((answer, index) => answer === round.key[index]).length;
     round.grades.push({ number, entered, expected });
+    if (round.mode === "multi" && banks.length > 1) {
+      selectBank(pick(banks.filter(bank => bank.subject !== round.subject)));
+    }
     round.paper = nextPaper();
-    return { remainingMs, count: round.grades.length, paper: round.paper };
+    return { remainingMs, count: round.grades.length, ...exam() };
   };
 })();

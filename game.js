@@ -19,7 +19,7 @@ grade.disabled = true;
 grade.setAttribute("aria-label", "考卷得分，滿分 100");
 field("student-heading", "score").append(grade);
 const keypad = get("keypad");
-const start = get("start");
+const modeButtons = document.querySelectorAll(".mode-buttons button");
 const submit = get("submit");
 const results = get("results");
 const tutorial = get("tutorial");
@@ -140,6 +140,9 @@ function renderPaper(nextPaper) {
 
 function updateControls() {
   const editable = phase === "playing";
+  const canChoose = phase === "ready" || phase === "finished";
+  for (const button of modeButtons) button.disabled = !canChoose;
+  get("restart").disabled = !canChoose;
   get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
   grade.disabled = !editable;
   submit.disabled = !editable;
@@ -176,8 +179,7 @@ function tick() {
 async function startRound(mode) {
   if (phase === "starting") return;
   phase = "starting";
-  start.disabled = true;
-  get("restart").disabled = true;
+  updateControls();
   message();
   try {
     round = await api("start", "POST", mode);
@@ -186,6 +188,7 @@ async function startRound(mode) {
     get("clock-digits").toggleAttribute("hidden", round.practice);
     get("time-bar").hidden = get("clock").hidden = round.practice;
     get("practice-clock").hidden = practiceFinish.hidden = !round.practice;
+    get("time-bar").max = round.mode === "multi" ? 120000 : 60000;
     get("clock-card").classList.remove("urgent");
     submittedPapers.clear();
     deadline = round.practice ? null : performance.now() + round.remainingMs;
@@ -209,9 +212,6 @@ async function startRound(mode) {
     ink.hidden = true;
     updateControls();
     message(error.name === "Error" ? error.message : "無法開始閱卷，請再試一次。");
-  } finally {
-    start.disabled = false;
-    get("restart").disabled = false;
   }
 }
 
@@ -240,6 +240,12 @@ get("grade-form").addEventListener("submit", async event => {
     }
     if (!round.practice) deadline = performance.now() + data.remainingMs;
     get("count").textContent = String(data.count).padStart(2, "0");
+    if (round.mode === "multi") {
+      round.subject = data.subject;
+      round.key = data.key;
+      round.prompts = data.prompts;
+      renderKey();
+    }
     renderPaper(data.paper);
     const sheet = get("student-sheet");
     if (sheet.getBoundingClientRect().top < 0) {
@@ -297,7 +303,7 @@ function rememberPaper(score) {
   } else {
     canvas.remove();
   }
-  submittedPapers.set(key, { copy, width: source.getBoundingClientRect().width });
+  submittedPapers.set(key, { copy, subject: round.subject, width: source.getBoundingClientRect().width });
 }
 
 function fitReviewPaper(frame) {
@@ -341,6 +347,7 @@ function renderReviewedPapers(grades) {
     verdict.textContent = entered === expected ? "給分正確" : "給分有誤";
     const snapshot = submittedPapers.get(`${number}:${entered}`);
     if (snapshot) {
+      label.textContent += ` · ${snapshot.subject}`;
       const preview = reviewFrame(snapshot);
       preview.setAttribute("aria-hidden", "true");
       link.append(preview);
@@ -363,7 +370,7 @@ function renderRoute() {
   if (content.firstElementChild) reviewResize.unobserve(content.firstElementChild);
   content.replaceChildren();
   if (sheet) {
-    get("paper-view-title").textContent = `第 ${hash.slice(7)} 張考卷`;
+    get("paper-view-title").textContent = `第 ${hash.slice(7)} 張考卷${sheet.snapshot ? ` · ${sheet.snapshot.subject}` : ""}`;
     get("paper-view-scores").textContent = sheet.scores;
     if (sheet.snapshot) content.append(reviewFrame(sheet.snapshot));
     get("paper-view-title").focus({ preventScroll: true });
@@ -386,7 +393,8 @@ function showResults(data) {
   submit.textContent = "下一張 →";
   get("count").textContent = String(data.count).padStart(2, "0");
   get("result-stats").textContent = `交件 ${data.count} 張・分數正確 ${data.correct} 張・正確率 ${data.accuracy}%`;
-  get("result-mode").textContent = round.practice ? "不限時練習 ／ 本局紀錄" : "閱卷鐘響 ／ 本局成績單";
+  get("result-mode").textContent = round.practice ? "練習模式 ／ 本局紀錄" :
+    round.mode === "multi" ? "多科模式 ／ 本局成績單" : "單科模式 ／ 本局成績單";
   get("result-rating").hidden = get("achievement").hidden = round.practice;
   if (round.practice) {
     get("result-title").textContent = "練習完成";
@@ -397,7 +405,7 @@ function showResults(data) {
     get("achievement").classList.toggle("new-ending", isNew);
     get("ending-label").textContent = isNew ? "★ 新結局" : "本局結局・已收錄";
     get("ending-title").textContent = ending.label;
-    get("ending-detail").textContent = `NO. ${ending.number} · ${round.subject} · ${ending.rule}`;
+    get("ending-detail").textContent = `NO. ${ending.number} · ${round.mode === "multi" ? "多科模式" : round.subject}`;
   }
   renderReviewedPapers(data.grades);
   history.pushState(null, "", "#results");
@@ -504,7 +512,12 @@ function openTutorial(offerStart) {
   tutorial.showModal();
 }
 
-start.addEventListener("click", () => openTutorial(true));
+for (const button of modeButtons) {
+  button.addEventListener("click", () => {
+    get("mode-picker").querySelector(`input[value="${button.dataset.mode}"]`).checked = true;
+    openTutorial(true);
+  });
+}
 get("open-tutorial").addEventListener("click", () => openTutorial(phase === "ready" || phase === "finished"));
 get("tutorial-start").addEventListener("click", () => {
   const mode = get("mode-picker").querySelector("input:checked").value;
