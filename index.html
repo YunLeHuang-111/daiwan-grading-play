@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6dbac">
+  <title>老師，我幾分！｜呆丸改考卷模擬器</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./browser-game.js" defer></script>
+  <script src="./game.js" defer></script>
+</head>
+<body>
+  <main class="desk">
+    <header class="intro">
+      <div>
+        <p class="eyebrow desk-tag">呆丸國中・段考閱卷室</p>
+        <h1>老師，我幾分<span>！</span></h1>
+        <p>對答案、用紅筆改卷。下課鐘響前，你能改幾張？</p>
+      </div>
+      <svg class="paper-mascot" viewBox="0 0 142 106" aria-hidden="true">
+        <ellipse cx="72" cy="97" rx="48" ry="5" fill="#dfb883" opacity=".4"/>
+        <g transform="rotate(-9 69 51)" stroke="#614f50" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M43 24a8 8 0 0 1 8-8h40l14 14v54a8 8 0 0 1-8 8H51a8 8 0 0 1-8-8z" fill="#fffdf7"/>
+          <path d="M91 16v11a3 3 0 0 0 3 3h11" fill="#f8dfad"/>
+          <path d="M54 32h23m-23 8h32" stroke="#d2bdaa"/>
+          <path d="M62 54v3m24-3v3m-17 6q5 7 10 0" fill="none"/>
+          <path d="M62 92l-4 5m27-5 5 5m-47-27-10-5m72 7 8-7" fill="none"/>
+          <ellipse cx="57" cy="63" rx="4.5" ry="2.6" fill="#f4a9ab" stroke="none"/>
+          <ellipse cx="91" cy="63" rx="4.5" ry="2.6" fill="#f4a9ab" stroke="none"/>
+        </g>
+        <path d="M24 19q0 7 7 8-7 0-7 7-1-7-8-7 7-1 8-8m95 11q0 6 6 7-6 0-6 6-1-6-7-6 6-1 7-7" fill="#d08c49"/>
+        <circle cx="33" cy="47" r="2" fill="#e98e8f"/>
+        <circle cx="126" cy="55" r="2.5" fill="#83b3a6"/>
+      </svg>
+      <div class="clock-card" id="clock-card">
+        <span class="clock-label">剩餘時間</span>
+        <strong id="clock">01:00</strong>
+        <progress id="time-bar" max="60000" value="60000" aria-label="剩餘時間"></progress>
+      </div>
+    </header>
+    <div class="ruler" aria-hidden="true"></div>
+    <nav class="paper-links" aria-label="跳到閱卷區">
+      <a href="#key-sheet">答案卷</a>
+      <a href="#student-sheet">學生考卷</a>
+      <a href="#grading-tools">計分鍵盤</a>
+    </nav>
+    <div class="workspace" id="workspace">
+      <section class="sheet-pane" id="key-sheet" aria-labelledby="key-title">
+        <div class="pane-label">
+          <h2 id="key-title">答案卷</h2><span>標準答案</span>
+        </div>
+        <div class="paper reference">
+          <div id="key-heading"></div>
+          <div class="question-columns" id="answer-key"></div>
+          <div class="paper-page">第 1 頁，共 1 頁</div>
+        </div>
+      </section>
+      <section class="sheet-pane" id="student-sheet" aria-labelledby="paper-title">
+        <div class="pane-label">
+          <h2 id="paper-title">學生考卷</h2><span>每張滿分 100</span>
+        </div>
+        <div class="paper student">
+          <form id="grade-form">
+            <div id="student-heading"></div>
+          </form>
+          <div class="answer-area">
+            <div class="question-columns" id="student-answers"></div>
+            <canvas id="ink" aria-label="可用滑鼠、觸控或手寫筆在答案區畫紅筆註記" hidden></canvas>
+          </div>
+          <div class="paper-page">第 1 頁，共 1 頁</div>
+          <div id="start-panel" class="start-panel">
+            <h3>老師，準備好了嗎？</h3>
+            <p>抽一科，開始 60 秒閱卷。</p>
+            <button type="button" class="primary" id="start">開始閱卷 <span aria-hidden="true">→</span></button>
+          </div>
+        </div>
+      </section>
+      <aside class="grading" id="grading-tools" aria-labelledby="grading-title">
+        <div class="pane-label">
+          <h2 id="grading-title">閱卷工具</h2><span>已改 <strong id="count">00</strong> 張</span>
+        </div>
+        <div class="grading-body">
+          <div class="pen-tools" aria-label="紅筆工具">
+            <span class="pen-label"><span class="pen" aria-hidden="true"></span>紅筆</span>
+            <button type="button" id="undo" disabled>復原</button>
+            <button type="button" id="clear" disabled>清除</button>
+          </div>
+          <div class="calculator">
+            <p class="calculator-label">計分鍵盤</p>
+            <div class="score-screen" id="score-preview" aria-live="polite">—</div>
+            <fieldset class="keypad" id="keypad" disabled>
+              <legend class="visually-hidden">輸入分數</legend>
+              <button type="button" data-digit="1">1</button>
+              <button type="button" data-digit="2">2</button>
+              <button type="button" data-digit="3">3</button>
+              <button type="button" data-digit="4">4</button>
+              <button type="button" data-digit="5">5</button>
+              <button type="button" data-digit="6">6</button>
+              <button type="button" data-digit="7">7</button>
+              <button type="button" data-digit="8">8</button>
+              <button type="button" data-digit="9">9</button>
+              <button type="button" data-edit="clear" aria-label="清除分數">清除</button>
+              <button type="button" data-digit="0">0</button>
+              <button type="button" data-edit="back" aria-label="刪除最後一位數">⌫</button>
+            </fieldset>
+            <button type="submit" form="grade-form" class="primary" id="submit" disabled>交件・下一張 <span aria-hidden="true">→</span></button>
+          </div>
+          <p class="message" id="message" role="status" hidden></p>
+        </div>
+      </aside>
+    </div>
+    <footer class="site-footer"><span>呆丸國中教務處</span><span>每題 10 分 · 交卷後才計入成績</span></footer>
+  </main>
+  <template id="exam-heading">
+    <table class="exam-heading">
+      <colgroup><col class="label-col"><col class="value-col"><col class="label-col"><col class="value-col"><col class="label-col"><col class="value-col"><col class="label-col"><col class="name-col"><col class="label-col"><col class="value-col"></colgroup>
+      <thead><tr><th colspan="10">呆丸國民中學　定期評量試題</th></tr></thead>
+      <tbody><tr>
+        <th scope="row">科目</th><td data-field="subject">　</td>
+        <th scope="row">班級</th><td>一甲</td>
+        <th scope="row">座號</th><td data-field="seat">　</td>
+        <th scope="row">姓名</th><td data-field="name">　</td>
+        <th scope="row">得分</th><td data-field="score"></td>
+      </tr></tbody>
+    </table>
+  </template>
+  <dialog id="results" aria-labelledby="result-title">
+    <p class="eyebrow">閱卷鐘響 ／ 本局成績單</p>
+    <h2 id="result-title"></h2>
+    <p class="result-score"><strong id="rating"></strong><span>／ 100 分</span></p>
+    <p id="result-stats"></p>
+    <p id="achievement"></p>
+    <details id="review"><summary>查看每張考卷的分數</summary><ol id="grade-list"></ol></details>
+    <button type="button" class="primary" id="restart">再改一輪 <span aria-hidden="true">→</span></button>
+  </dialog>
+</body>
+</html>
