@@ -20,6 +20,8 @@ grade.setAttribute("aria-label", "考卷得分，滿分 100");
 field("student-heading", "score").append(grade);
 const keypad = get("keypad");
 const modeButtons = document.querySelectorAll(".mode-buttons button");
+const start = get("start");
+let selectedMode = "timed";
 const submit = get("submit");
 const results = get("results");
 const tutorial = get("tutorial");
@@ -142,7 +144,7 @@ function updateControls() {
   const editable = phase === "playing";
   const canChoose = phase === "ready" || phase === "finished";
   for (const button of modeButtons) button.disabled = !canChoose;
-  get("restart").disabled = !canChoose;
+  get("restart").disabled = start.disabled = !canChoose;
   get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
   grade.disabled = !editable;
   submit.disabled = !editable;
@@ -177,7 +179,7 @@ function tick() {
 }
 
 async function startRound(mode) {
-  if (phase === "starting") return;
+  if (phase !== "ready" && phase !== "finished") return;
   phase = "starting";
   updateControls();
   message();
@@ -507,24 +509,22 @@ new ResizeObserver(([entry]) => {
   const height = entry.target.offsetHeight;
   document.body.style.setProperty("--grading-height", `${height}px`);
 }).observe(get("grading-tools"));
-function openTutorial(offerStart) {
-  get("mode-picker").hidden = get("tutorial-start").hidden = !offerStart;
-  tutorial.showModal();
-}
-
 for (const button of modeButtons) {
   button.addEventListener("click", () => {
-    get("mode-picker").querySelector(`input[value="${button.dataset.mode}"]`).checked = true;
-    openTutorial(true);
+    selectedMode = button.dataset.mode;
+    for (const option of modeButtons) {
+      option.setAttribute("aria-pressed", String(option === button));
+    }
+    get("selected-mode").textContent = button.textContent;
   });
 }
-get("open-tutorial").addEventListener("click", () => openTutorial(phase === "ready" || phase === "finished"));
-get("tutorial-start").addEventListener("click", () => {
-  const mode = get("mode-picker").querySelector("input:checked").value;
-  tutorial.close();
-  startRound(mode);
+start.addEventListener("click", () => startRound(selectedMode));
+get("restart").addEventListener("click", () => {
+  history.pushState(null, "", location.pathname + location.search);
+  renderRoute();
+  window.scrollTo(0, 0);
+  document.querySelector('.mode-buttons [aria-pressed="true"]').focus({ preventScroll: true });
 });
-get("restart").addEventListener("click", () => openTutorial(true));
 practiceFinish.addEventListener("click", () => {
   if (phase === "playing" && round.practice) finish();
 });
@@ -552,3 +552,5 @@ keypad.addEventListener("click", event => {
   else if (grade.value.length < 3) setGrade(grade.value + button.dataset.digit);
   message();
 });
+
+tutorial.showModal();
