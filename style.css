@@ -310,10 +310,18 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
   .grading-count { font-size: .82rem; }
   .start-panel { padding-top: 10px; }
 }
+@container (max-width: 390px) {
+  .question-columns { grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr); }
+  .sheet-group li { min-height: clamp(33px, 11cqw, 46px); align-content: start; row-gap: 0; }
+  .question-text { display: contents; }
+  .options { grid-column: 1 / -1; margin-top: 1px; padding-left: 4px; font-size: .92em; }
+}
 @container (max-width: 310px) {
-  .paper { padding-inline: 9px; }
-  .sheet-group { padding-right: 3px; }
-  .sheet-group + .sheet-group { padding-left: 4px; }
-  .sheet-group li { grid-template-columns: 23px minmax(0, 1fr); line-height: 1.18; }
-  .options { margin-top: 1px; }
+  .paper { padding: 7px 8px; }
+  .sheet-group { padding: 5px 3px 2px 0; }
+  .sheet-group + .sheet-group { padding: 5px 0 2px 4px; }
+  .sheet-group li { grid-template-columns: 22px minmax(0, 1fr); line-height: 1.15; }
+  .sheet-group h3 { min-height: 0; margin-bottom: 3px; }
+  .options { font-size: .9em; }
+  .paper-page { padding-top: 5px; }
 }

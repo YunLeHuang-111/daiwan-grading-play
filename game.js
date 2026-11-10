@@ -100,11 +100,13 @@ function renderExam(container, marks, prompts) {
       number.textContent = `${i + 1}. `;
       const [stem, ...choices] = (prompts[i] || "").split("　");
       prompt.textContent = stem;
-      question.append(number, prompt);
+      const stemText = document.createElement("span");
+      stemText.append(number, prompt);
+      question.append(stemText);
       if (choices.length) {
         const options = document.createElement("span");
         options.className = "options";
-        options.textContent = choices.join("　").replaceAll("／", "　");
+        options.textContent = choices.join("　").replaceAll("／", " ");
         question.append(options);
       }
       item.append(slot, question);
@@ -199,14 +201,14 @@ async function startRound(mode) {
       tick();
       timer = setInterval(tick, 100);
     }
-  } catch {
+  } catch (error) {
     phase = "ready";
     if (location.hash) history.replaceState(null, "", location.pathname + location.search);
     renderRoute();
     get("start-panel").hidden = false;
     ink.hidden = true;
     updateControls();
-    message("無法開始閱卷，請確認 Java 伺服器仍在執行，再試一次。");
+    message(error.name === "Error" ? error.message : "無法開始閱卷，請再試一次。");
   } finally {
     start.disabled = false;
     get("restart").disabled = false;
