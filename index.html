@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css?v=mode-selection">
+  <link rel="stylesheet" href="./style.css?v=mustard-clock">
   <script src="./achievements.js?v=three-modes" defer></script>
   <script src="./browser-game.js?v=three-modes" defer></script>
-  <script src="./game.js?v=mode-selection" defer></script>
+  <script src="./game.js?v=mustard-clock" defer></script>
 </head>
 <body>
   <main class="desk" id="game-page">
@@ -33,6 +33,7 @@
         <button type="button" data-mode="practice" aria-pressed="false"><strong>練習模式</strong></button>
       </div>
       <div class="desk-actions" aria-label="遊戲資訊">
+        <button type="button" class="desk-button" id="open-tutorial" aria-haspopup="dialog" aria-controls="tutorial">遊戲玩法</button>
         <button type="button" class="achievement-button" data-open-achievements aria-haspopup="dialog"><span aria-hidden="true">★</span> 成就圖鑑 <strong id="achievement-total">0 / 200</strong></button>
       </div>
     </div>

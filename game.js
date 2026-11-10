@@ -518,6 +518,7 @@ for (const button of modeButtons) {
     get("selected-mode").textContent = button.textContent;
   });
 }
+get("open-tutorial").addEventListener("click", () => tutorial.showModal());
 start.addEventListener("click", () => startRound(selectedMode));
 get("restart").addEventListener("click", () => {
   history.pushState(null, "", location.pathname + location.search);
