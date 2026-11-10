@@ -34,6 +34,10 @@ let activeStroke;
 let activePointer;
 let tool = "pen";
 let tutorialSeen = false;
+const submittedPapers = new Map();
+const reviewResize = new ResizeObserver(entries => {
+  for (const { target } of entries) fitReviewPaper(target);
+});
 const clockDigits = get("clock-digits");
 const segmentPaths = ["M5 3h12", "M19 5v11", "M19 22v11", "M5 35h12", "M3 22v11", "M3 5v11", "M5 19h12"];
 const digitSegments = ["abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg"];
@@ -173,6 +177,7 @@ async function startRound() {
   message();
   try {
     round = await api("start", "POST");
+    submittedPapers.clear();
     deadline = performance.now() + round.remainingMs;
     get("start-panel").hidden = true;
     ink.hidden = false;
@@ -213,6 +218,7 @@ get("grade-form").addEventListener("submit", async event => {
   updateControls();
   message();
   try {
+    rememberPaper(score);
     const data = await api(`${round.id}/submit`, "POST", `${paper.number},${score}`);
     if (data.finished) {
       showResults(data.result);
@@ -254,6 +260,75 @@ async function finish() {
   }
 }
 
+function rememberPaper(score) {
+  const key = `${paper.number}:${score}`;
+  if (submittedPapers.has(key)) return;
+  const source = get("student-sheet");
+  const original = source.querySelector(".paper");
+  const copy = original.cloneNode(true);
+  copy.querySelector(".start-panel").remove();
+  copy.querySelectorAll("[id]").forEach(element => element.removeAttribute("id"));
+  const input = copy.querySelector("input");
+  const scoreLabel = document.createElement("strong");
+  scoreLabel.className = "review-score";
+  scoreLabel.textContent = score;
+  input.replaceWith(scoreLabel);
+  const canvas = copy.querySelector("canvas");
+  if (strokes.length) {
+    const annotation = document.createElement("img");
+    annotation.className = "review-ink";
+    annotation.src = ink.toDataURL();
+    annotation.alt = "閱卷筆跡";
+    canvas.replaceWith(annotation);
+  } else {
+    canvas.remove();
+  }
+  submittedPapers.set(key, { copy, width: source.getBoundingClientRect().width });
+}
+
+function fitReviewPaper(frame) {
+  const page = frame.firstElementChild;
+  const scale = Math.min(1, frame.clientWidth / parseFloat(page.style.width));
+  page.style.transform = `scale(${scale})`;
+  frame.style.height = `${page.offsetHeight * scale}px`;
+}
+
+function renderReviewedPapers(grades) {
+  reviewResize.disconnect();
+  const list = get("grade-list");
+  list.replaceChildren();
+  get("review-count").textContent = `${grades.length} 張`;
+  for (const { number, entered, expected } of grades) {
+    const item = document.createElement("li");
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    const label = document.createElement("strong");
+    const scores = document.createElement("span");
+    const verdict = document.createElement("span");
+    label.textContent = `第 ${number} 張`;
+    scores.textContent = `你給 ${entered} 分 · 應得 ${expected} 分`;
+    verdict.className = entered === expected ? "review-verdict correct" : "review-verdict";
+    verdict.textContent = entered === expected ? "給分正確" : "給分有誤";
+    summary.append(label, scores, verdict);
+    details.append(summary);
+    const snapshot = submittedPapers.get(`${number}:${entered}`);
+    if (snapshot) {
+      const frame = document.createElement("div");
+      frame.className = "review-frame";
+      frame.style.maxWidth = `${snapshot.width}px`;
+      const page = document.createElement("div");
+      page.className = "review-page";
+      page.style.width = `${snapshot.width}px`;
+      page.append(snapshot.copy);
+      frame.append(page);
+      details.append(frame);
+      reviewResize.observe(frame);
+    }
+    item.append(details);
+    list.append(item);
+  }
+}
+
 function showResults(data) {
   clearInterval(timer);
   phase = "finished";
@@ -263,21 +338,15 @@ function showResults(data) {
   submit.type = "submit";
   submit.textContent = "下一張 →";
   get("count").textContent = String(data.count).padStart(2, "0");
-  get("result-title").textContent = data.title;
   get("rating").textContent = data.score;
   get("result-stats").textContent = `交件 ${data.count} 張・分數正確 ${data.correct} 張・正確率 ${data.accuracy}%`;
-  const { ending, isNew } = achievementBook.record(data, round.subject);
+  const { ending, isNew } = achievementBook.record(data, round.id);
+  get("result-title").textContent = ending.title;
   get("achievement").classList.toggle("new-ending", isNew);
   get("ending-label").textContent = isNew ? "★ 新結局" : "本局結局・已收錄";
-  get("ending-title").textContent = ending.title;
-  get("ending-detail").textContent = `NO. ${ending.number} · ${ending.subject} · ${ending.rule}`;
-  const grades = get("grade-list");
-  grades.replaceChildren();
-  data.grades.forEach(({ number, entered, expected }) => {
-    const row = document.createElement("li");
-    row.textContent = `第 ${number} 張　給 ${entered} 分／應得 ${expected} 分`;
-    grades.append(row);
-  });
+  get("ending-title").textContent = ending.label;
+  get("ending-detail").textContent = `NO. ${ending.number} · ${round.subject} · ${ending.rule}`;
+  renderReviewedPapers(data.grades);
   get("review").hidden = data.count === 0;
   get("review").open = false;
   results.showModal();

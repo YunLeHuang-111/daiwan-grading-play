@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css?v=ending-book">
-  <script src="./achievements.js?v=ending-book" defer></script>
+  <link rel="stylesheet" href="./style.css?v=title-review">
+  <script src="./achievements.js?v=title-review" defer></script>
   <script src="./browser-game.js" defer></script>
-  <script src="./game.js?v=ending-book" defer></script>
+  <script src="./game.js?v=title-review" defer></script>
 </head>
 <body>
   <main class="desk">
@@ -147,7 +147,7 @@
       <h3 id="ending-title"></h3>
       <p id="ending-detail"></p>
     </section>
-    <details id="review"><summary>查看每張考卷的分數</summary><ol id="grade-list"></ol></details>
+    <details id="review"><summary>查看已批改的考卷 <span id="review-count"></span></summary><ol id="grade-list"></ol></details>
     <button type="button" class="achievement-button" data-open-achievements><span aria-hidden="true">★</span> 成就圖鑑</button>
     <button type="button" class="primary" id="restart">再改一輪 <span aria-hidden="true">→</span></button>
   </dialog>
@@ -162,7 +162,7 @@
         <progress id="collection-progress" max="150" value="0" aria-label="結局收錄進度"></progress>
       </div>
       <label class="collection-filter" for="achievement-category">
-        <span>依科目查看</span>
+        <span>依結算風格查看</span>
         <select id="achievement-category"></select>
       </label>
     </div>
