@@ -115,6 +115,7 @@ progress::-moz-progress-bar { background: #a9cf74; }
   min-height: 36px; padding: 4px 7px; border: 1px solid #bda790; border-radius: 7px;
   background: #fffaf0; color: var(--ink); font-size: .78rem; font-weight: 750;
 }
+.pen-tools button { white-space: nowrap; }
 .pen-tools button svg { display: block; width: 27px; height: 27px; }
 .pen-tools button[aria-pressed="true"] { background: #ffded5; border-color: #bc7066; }
 .grading-count { margin-left: auto; white-space: nowrap; font-size: .78rem; }
