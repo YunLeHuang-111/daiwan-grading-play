@@ -89,7 +89,6 @@ progress::-moz-progress-bar { background: #577e98; }
 #grade { display: block; width: 100%; height: 32px; padding: 0; border: 0; background: #fff; color: var(--red); text-align: center; font: 800 1.06rem ui-monospace, monospace; }
 #grade { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 #grade:focus-visible { outline-offset: -2px; }
-.answer-area { position: relative; }
 .question-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .sheet-group { min-width: 0; padding: 7px 6px 4px 0; }
 .sheet-group + .sheet-group { border-left: 1px solid #777; padding: 7px 0 4px 7px; }
@@ -104,7 +103,7 @@ progress::-moz-progress-bar { background: #577e98; }
 .q-number { font-variant-numeric: tabular-nums; }
 .options { display: block; margin-top: 3px; }
 .paper-page { margin-top: auto; padding-top: 8px; border-top: 1px solid #b2b2b2; text-align: center; font-size: .68rem; }
-#ink { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; -webkit-user-select: none; user-select: none; cursor: crosshair; }
+#ink { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; touch-action: none; -webkit-user-select: none; user-select: none; cursor: crosshair; }
 #ink.eraser-active { cursor: cell; }
 .start-panel { position: absolute; z-index: 1; inset: clamp(69px, 20cqw, 102px) 0 27px; display: grid; justify-items: center; align-content: center; background: #ffffffeb; text-align: center; font-family: system-ui, sans-serif; padding: 10px; }
 .start-panel h3 { margin: 0; font-size: 1.27rem; }
