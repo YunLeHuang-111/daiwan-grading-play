@@ -33,7 +33,8 @@ let strokes = [];
 let activeStroke;
 let activePointer;
 let tool = "pen";
-let tutorialSeen = false;
+const practiceFinish = get("finish-practice");
+const reviewedPapers = new Map();
 const submittedPapers = new Map();
 const reviewResize = new ResizeObserver(entries => {
   for (const { target } of entries) fitReviewPaper(target);
@@ -91,7 +92,7 @@ function renderExam(container, marks, prompts) {
       const number = document.createElement("span");
       const prompt = document.createElement("span");
       slot.className = "answer-slot";
-      mark.className = "written-answer";
+      mark.className = index === 1 ? "written-answer true-false-mark" : "written-answer";
       question.className = "question-text";
       number.className = "q-number";
       slot.append("(", mark, ")");
@@ -141,6 +142,7 @@ function updateControls() {
   grade.disabled = !editable;
   submit.disabled = !editable;
   keypad.disabled = !editable;
+  practiceFinish.disabled = !editable;
   get("undo").disabled = !editable || strokes.length === 0;
   get("clear").disabled = !editable || strokes.length === 0;
 }
@@ -163,22 +165,28 @@ function updateClock(ms) {
 }
 
 function tick() {
+  if (round.practice) return;
   const left = Math.max(0, deadline - performance.now());
   updateClock(left);
   if (left === 0 && phase === "playing") finish();
 }
 
-async function startRound() {
+async function startRound(mode) {
   if (phase === "starting") return;
   phase = "starting";
   start.disabled = true;
   get("restart").disabled = true;
-  if (results.open) results.close();
   message();
   try {
-    round = await api("start", "POST");
+    round = await api("start", "POST", mode);
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    renderRoute();
+    get("clock-digits").toggleAttribute("hidden", round.practice);
+    get("time-bar").hidden = get("clock").hidden = round.practice;
+    get("practice-clock").hidden = practiceFinish.hidden = !round.practice;
+    get("clock-card").classList.remove("urgent");
     submittedPapers.clear();
-    deadline = performance.now() + round.remainingMs;
+    deadline = round.practice ? null : performance.now() + round.remainingMs;
     get("start-panel").hidden = true;
     ink.hidden = false;
     get("count").textContent = "00";
@@ -187,10 +195,14 @@ async function startRound() {
     renderPaper(round.paper);
     phase = "playing";
     updateControls();
-    tick();
-    timer = setInterval(tick, 100);
+    if (!round.practice) {
+      tick();
+      timer = setInterval(tick, 100);
+    }
   } catch {
     phase = "ready";
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    renderRoute();
     get("start-panel").hidden = false;
     ink.hidden = true;
     updateControls();
@@ -204,7 +216,7 @@ async function startRound() {
 get("grade-form").addEventListener("submit", async event => {
   event.preventDefault();
   if (phase !== "playing") return;
-  if (performance.now() >= deadline) {
+  if (deadline !== null && performance.now() >= deadline) {
     finish();
     return;
   }
@@ -224,7 +236,7 @@ get("grade-form").addEventListener("submit", async event => {
       showResults(data.result);
       return;
     }
-    deadline = performance.now() + data.remainingMs;
+    if (!round.practice) deadline = performance.now() + data.remainingMs;
     get("count").textContent = String(data.count).padStart(2, "0");
     renderPaper(data.paper);
     const sheet = get("student-sheet");
@@ -243,7 +255,7 @@ async function finish() {
   phase = "finishing";
   updateControls();
   try {
-    const data = await api(`${round.id}/results`);
+    const data = round.practice ? await api(`${round.id}/finish`, "POST") : await api(`${round.id}/results`);
     if (data.remainingMs !== undefined) {
       deadline = performance.now() + data.remainingMs;
       phase = "playing";
@@ -293,15 +305,31 @@ function fitReviewPaper(frame) {
   frame.style.height = `${page.offsetHeight * scale}px`;
 }
 
+function reviewFrame(snapshot) {
+  const frame = document.createElement("div");
+  frame.className = "review-frame";
+  frame.style.maxWidth = `${snapshot.width}px`;
+  const page = document.createElement("div");
+  page.className = "review-page";
+  page.style.width = `${snapshot.width}px`;
+  page.append(snapshot.copy.cloneNode(true));
+  frame.append(page);
+  reviewResize.observe(frame);
+  return frame;
+}
+
 function renderReviewedPapers(grades) {
   reviewResize.disconnect();
+  reviewedPapers.clear();
   const list = get("grade-list");
   list.replaceChildren();
   get("review-count").textContent = `${grades.length} 張`;
+  get("review-note").textContent = grades.length ? "點選縮圖即可放大查看。" : "這一局還沒有交件。";
   for (const { number, entered, expected } of grades) {
     const item = document.createElement("li");
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
+    const link = document.createElement("a");
+    link.className = "review-card";
+    link.href = `#paper-${number}`;
     const label = document.createElement("strong");
     const scores = document.createElement("span");
     const verdict = document.createElement("span");
@@ -309,47 +337,69 @@ function renderReviewedPapers(grades) {
     scores.textContent = `你給 ${entered} 分 · 應得 ${expected} 分`;
     verdict.className = entered === expected ? "review-verdict correct" : "review-verdict";
     verdict.textContent = entered === expected ? "給分正確" : "給分有誤";
-    summary.append(label, scores, verdict);
-    details.append(summary);
     const snapshot = submittedPapers.get(`${number}:${entered}`);
     if (snapshot) {
-      const frame = document.createElement("div");
-      frame.className = "review-frame";
-      frame.style.maxWidth = `${snapshot.width}px`;
-      const page = document.createElement("div");
-      page.className = "review-page";
-      page.style.width = `${snapshot.width}px`;
-      page.append(snapshot.copy);
-      frame.append(page);
-      details.append(frame);
-      reviewResize.observe(frame);
+      const preview = reviewFrame(snapshot);
+      preview.setAttribute("aria-hidden", "true");
+      link.append(preview);
     }
-    item.append(details);
+    link.append(label, scores, verdict);
+    item.append(link);
     list.append(item);
+    reviewedPapers.set(String(number), { snapshot, scores: scores.textContent });
   }
+}
+
+function renderRoute() {
+  const hash = location.hash;
+  const sheet = phase === "finished" && hash.startsWith("#paper-") && reviewedPapers.get(hash.slice(7));
+  const showResultsPage = phase === "finished" && hash === "#results";
+  get("game-page").hidden = Boolean(sheet || showResultsPage);
+  results.hidden = !showResultsPage;
+  get("paper-view").hidden = !sheet;
+  const content = get("paper-view-content");
+  if (content.firstElementChild) reviewResize.unobserve(content.firstElementChild);
+  content.replaceChildren();
+  if (sheet) {
+    get("paper-view-title").textContent = `第 ${hash.slice(7)} 張考卷`;
+    get("paper-view-scores").textContent = sheet.scores;
+    if (sheet.snapshot) content.append(reviewFrame(sheet.snapshot));
+    get("paper-view-title").focus({ preventScroll: true });
+  } else if (showResultsPage) {
+    get("result-title").focus({ preventScroll: true });
+  } else if (phase === "finished") {
+    get("start-panel").hidden = false;
+    ink.hidden = true;
+  }
+  if (sheet || showResultsPage) window.scrollTo(0, 0);
 }
 
 function showResults(data) {
   clearInterval(timer);
   phase = "finished";
   updateControls();
-  updateClock(0);
+  if (!round.practice) updateClock(0);
   message();
   submit.type = "submit";
   submit.textContent = "下一張 →";
   get("count").textContent = String(data.count).padStart(2, "0");
-  get("rating").textContent = data.score;
   get("result-stats").textContent = `交件 ${data.count} 張・分數正確 ${data.correct} 張・正確率 ${data.accuracy}%`;
-  const { ending, isNew } = achievementBook.record(data, round.id);
-  get("result-title").textContent = ending.title;
-  get("achievement").classList.toggle("new-ending", isNew);
-  get("ending-label").textContent = isNew ? "★ 新結局" : "本局結局・已收錄";
-  get("ending-title").textContent = ending.label;
-  get("ending-detail").textContent = `NO. ${ending.number} · ${round.subject} · ${ending.rule}`;
+  get("result-mode").textContent = round.practice ? "不限時練習 ／ 本局紀錄" : "閱卷鐘響 ／ 本局成績單";
+  get("result-rating").hidden = get("achievement").hidden = round.practice;
+  if (round.practice) {
+    get("result-title").textContent = "練習完成";
+  } else {
+    get("rating").textContent = data.score;
+    const { ending, isNew } = achievementBook.record(data, round.id);
+    get("result-title").textContent = ending.title;
+    get("achievement").classList.toggle("new-ending", isNew);
+    get("ending-label").textContent = isNew ? "★ 新結局" : "本局結局・已收錄";
+    get("ending-title").textContent = ending.label;
+    get("ending-detail").textContent = `NO. ${ending.number} · ${round.subject} · ${ending.rule}`;
+  }
   renderReviewedPapers(data.grades);
-  get("review").hidden = data.count === 0;
-  get("review").open = false;
-  results.showModal();
+  history.pushState(null, "", "#results");
+  renderRoute();
 }
 
 function resizeInk() {
@@ -448,28 +498,31 @@ new ResizeObserver(([entry]) => {
   document.body.style.setProperty("--grading-height", `${height}px`);
 }).observe(get("grading-tools"));
 function openTutorial(offerStart) {
-  get("tutorial-start").hidden = !offerStart;
+  get("mode-picker").hidden = get("tutorial-start").hidden = !offerStart;
   tutorial.showModal();
 }
 
-start.addEventListener("click", () => {
-  if (tutorialSeen) startRound();
-  else openTutorial(true);
-});
-get("open-tutorial").addEventListener("click", () => openTutorial(phase === "ready"));
+start.addEventListener("click", () => openTutorial(true));
+get("open-tutorial").addEventListener("click", () => openTutorial(phase === "ready" || phase === "finished"));
 get("tutorial-start").addEventListener("click", () => {
-  tutorialSeen = true;
+  const mode = get("mode-picker").querySelector("input:checked").value;
   tutorial.close();
-  startRound();
+  startRound(mode);
 });
-get("restart").addEventListener("click", startRound);
+get("restart").addEventListener("click", () => openTutorial(true));
+practiceFinish.addEventListener("click", () => {
+  if (phase === "playing" && round.practice) finish();
+});
+window.addEventListener("hashchange", renderRoute);
+if (location.hash === "#results" || location.hash.startsWith("#paper-")) {
+  history.replaceState(null, "", location.pathname + location.search);
+}
 submit.addEventListener("click", () => {
   if (submit.type === "button") {
     submit.disabled = true;
     finish();
   }
 });
-results.addEventListener("cancel", event => event.preventDefault());
 
 for (const id of ["answer-key", "student-answers"]) renderExam(get(id), [], []);
 grade.addEventListener("input", () => {

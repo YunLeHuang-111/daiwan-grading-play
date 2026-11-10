@@ -28,25 +28,37 @@ const browserGame = (() => {
 
   return async (path, method, body) => {
     if (path === "start" && method === "POST") {
+      if (body && !["timed", "practice"].includes(body)) throw new Error("找不到此遊玩模式");
+      const practice = body === "practice";
       const subjectIndex = Math.floor(Math.random() * subjects.length);
       const questions = banks[subjectIndex];
       round = {
         id: crypto.randomUUID(),
-        end: performance.now() + 60000,
+        end: practice ? null : performance.now() + 60000,
+        practice,
+        finished: false,
         key: questions.map(([, answer]) => answer),
         grades: [],
       };
       round.paper = nextPaper();
       return { id: round.id, subject: subjects[subjectIndex], key: round.key,
-        prompts: questions.map(([prompt]) => prompt), remainingMs: 60000, paper: round.paper };
+        prompts: questions.map(([prompt]) => prompt), remainingMs: practice ? null : 60000, practice, paper: round.paper };
     }
     const [id, action] = path.split("/");
     if (id !== round?.id) throw new Error("找不到這一局，請重新開始。");
-    const remainingMs = Math.max(0, round.end - performance.now());
-    if (action === "results") return remainingMs ? { remainingMs } : results();
+    const remainingMs = round.practice ? null : Math.max(0, round.end - performance.now());
+    if (round.practice && action === "finish" && method === "POST") {
+      round.finished = true;
+      return results();
+    }
+    if (action === "results") {
+      if (round.finished || remainingMs === 0) return results();
+      if (round.practice) throw new Error("請先結束練習");
+      return { remainingMs };
+    }
     if (action !== "submit" || method !== "POST") throw new Error("找不到此操作。");
     if (!/^[1-9][0-9]*,(?:100|[0-9]{1,2})$/.test(body)) throw new Error("請填入 0 到 100 的整數。");
-    if (!remainingMs) return { finished: true, result: results() };
+    if (round.finished || remainingMs === 0) return { finished: true, result: results() };
     const [number, entered] = body.split(",").map(Number);
     if (number !== round.paper.number) throw new Error("這張考卷已交件，請重新開始。");
     const expected = 10 * round.paper.answers.filter((answer, index) => answer === round.key[index]).length;

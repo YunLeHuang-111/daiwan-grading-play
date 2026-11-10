@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css?v=title-review">
+  <link rel="stylesheet" href="./style.css?v=practice-gallery">
   <script src="./achievements.js?v=title-review" defer></script>
-  <script src="./browser-game.js" defer></script>
-  <script src="./game.js?v=title-review" defer></script>
+  <script src="./browser-game.js?v=practice-gallery" defer></script>
+  <script src="./game.js?v=practice-gallery" defer></script>
 </head>
 <body>
-  <main class="desk">
+  <main class="desk" id="game-page">
     <header class="intro">
       <div>
         <p class="eyebrow desk-tag">呆丸國中・段考閱卷室</p>
@@ -22,6 +22,7 @@
         <span class="clock-label">剩餘時間</span>
         <strong id="clock" class="visually-hidden">01:00</strong>
         <svg id="clock-digits" viewBox="0 0 116 38" aria-hidden="true"></svg>
+        <span id="practice-clock" hidden>不限時</span>
         <progress id="time-bar" max="60000" value="60000" aria-label="剩餘時間"></progress>
       </div>
     </header>
@@ -42,6 +43,7 @@
           <button type="button" id="clear" aria-label="清除全部筆跡" disabled>清除</button>
         </div>
         <span class="grading-count">已改 <strong id="count">00</strong> 張</span>
+        <button type="button" class="desk-button" id="finish-practice" hidden>結束練習</button>
       </div>
       <div class="grading-body">
         <div class="score-controls">
@@ -97,17 +99,12 @@
           <div class="paper-page">第 1 頁，共 1 頁</div>
           <div id="start-panel" class="start-panel">
             <h3>老師，準備好了嗎？</h3>
-            <p>抽一科，開始 60 秒閱卷。</p>
+            <p>抽一科，選擇你想玩的模式。</p>
             <button type="button" class="primary" id="start">開始閱卷 <span aria-hidden="true">→</span></button>
           </div>
         </div>
       </section>
     </div>
-    <footer class="site-footer">
-      <span>呆丸國中教務處</span>
-      <span>每題 10 分 · 交卷後才計入成績</span>
-      <span class="author-credit">作者 LeleHuang</span>
-    </footer>
   </main>
   <template id="exam-heading">
     <table class="exam-heading">
@@ -131,26 +128,46 @@
       <li><strong>畫紅筆</strong><span>在學生考卷上畫記，畫錯了可以用橡皮擦。</span></li>
       <li><strong>給分交卷</strong><span>每題 10 分。填好總分，再按「下一張」交件。</span></li>
     </ol>
-    <p class="guide-note"><strong>60 秒挑戰</strong>　科目、交件張數與給分正確率會決定本局結局。</p>
+    <fieldset class="mode-picker" id="mode-picker">
+      <legend>選擇遊玩模式</legend>
+      <label><input type="radio" name="mode" value="timed" checked><span><strong>60 秒挑戰</strong><small>倒數結算，可收錄稱號。</small></span></label>
+      <label><input type="radio" name="mode" value="practice"><span><strong>不限時練習</strong><small>慢慢改，隨時結束看考卷。</small></span></label>
+    </fieldset>
     <div class="tutorial-actions">
       <form method="dialog"><button type="submit" class="desk-button">關閉</button></form>
-      <button type="button" class="primary" id="tutorial-start">開始 60 秒 <span aria-hidden="true">→</span></button>
+      <button type="button" class="primary" id="tutorial-start">開始閱卷 <span aria-hidden="true">→</span></button>
     </div>
   </dialog>
-  <dialog id="results" aria-labelledby="result-title">
-    <p class="eyebrow">閱卷鐘響 ／ 本局成績單</p>
-    <h2 id="result-title" class="result-title"></h2>
-    <p class="result-score"><strong id="rating"></strong><span>／ 100 分</span></p>
-    <p id="result-stats"></p>
-    <section id="achievement" aria-label="本局結局">
-      <span id="ending-label"></span>
-      <h3 id="ending-title"></h3>
-      <p id="ending-detail"></p>
+  <main id="results" class="desk result-page" aria-labelledby="result-title" hidden>
+    <header class="result-header">
+      <div>
+        <p class="eyebrow" id="result-mode">閱卷鐘響 ／ 本局成績單</p>
+        <h1 id="result-title" class="result-title" tabindex="-1"></h1>
+        <p class="result-score" id="result-rating"><strong id="rating"></strong><span>／ 100 分</span></p>
+        <p id="result-stats"></p>
+      </div>
+      <section id="achievement" aria-label="本局結局">
+        <span id="ending-label"></span>
+        <h2 id="ending-title"></h2>
+        <p id="ending-detail"></p>
+      </section>
+    </header>
+    <div class="result-actions">
+      <button type="button" class="achievement-button" data-open-achievements><span aria-hidden="true">★</span> 成就圖鑑</button>
+      <button type="button" class="primary" id="restart">選擇模式・再改一輪 <span aria-hidden="true">→</span></button>
+    </div>
+    <section id="review" aria-labelledby="review-title">
+      <h2 id="review-title">已批改的考卷 <span id="review-count"></span></h2>
+      <p id="review-note">點選縮圖即可放大查看。</p>
+      <ol id="grade-list"></ol>
     </section>
-    <details id="review"><summary>查看已批改的考卷 <span id="review-count"></span></summary><ol id="grade-list"></ol></details>
-    <button type="button" class="achievement-button" data-open-achievements><span aria-hidden="true">★</span> 成就圖鑑</button>
-    <button type="button" class="primary" id="restart">再改一輪 <span aria-hidden="true">→</span></button>
-  </dialog>
+  </main>
+  <main id="paper-view" class="desk paper-view" aria-labelledby="paper-view-title" hidden>
+    <a class="back-link" href="#results">← 回成績單</a>
+    <h1 id="paper-view-title" tabindex="-1"></h1>
+    <p id="paper-view-scores"></p>
+    <div id="paper-view-content"></div>
+  </main>
   <dialog id="achievement-dialog" aria-labelledby="achievement-title">
     <div class="collection-heading">
       <div><p class="eyebrow">呆丸國中 ／ 閱卷紀錄</p><h2 id="achievement-title">成就圖鑑</h2></div>
@@ -168,5 +185,10 @@
     </div>
     <ol id="achievement-list" class="achievement-list"></ol>
   </dialog>
+  <footer class="site-footer">
+    <span>呆丸國中教務處</span>
+    <span>每題 10 分 · 交卷後才計入成績</span>
+    <span class="author-credit">作者 LeleHuang</span>
+  </footer>
 </body>
 </html>
