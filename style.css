@@ -163,6 +163,7 @@ progress::-moz-progress-bar { background: #683b38; }
 .keypad button[data-edit] { background: #f8d7ca; border-color: #d1a096; color: #823e32; box-shadow: 0 2px 0 #c79a87; }
 .keypad button[data-edit="clear"] { font-size: .68rem; }
 .keypad button:not(:disabled):hover { background: #fff; }
+.keypad button[data-score][aria-pressed="true"] { background: #a63d36; border-color: #87322d; color: #fff; box-shadow: 0 2px 0 #87322d; }
 .keypad button:not(:disabled):active { transform: translateY(2px); box-shadow: none; }
 #submit {
   min-height: 60px; padding-inline: 7px; font-size: 1.13rem; background: #a63d36; border-color: #87322d;

@@ -19,6 +19,7 @@ grade.disabled = true;
 grade.setAttribute("aria-label", "考卷得分，滿分 100");
 field("student-heading", "score").append(grade);
 const keypad = get("keypad");
+const scoreButtons = keypad.querySelectorAll("[data-score]");
 const modeButtons = document.querySelectorAll(".mode-buttons button");
 const start = get("start");
 let selectedMode = "timed";
@@ -128,6 +129,9 @@ function renderKey() {
 function setGrade(value) {
   grade.value = value;
   get("score-preview").textContent = value || "—";
+  for (const button of scoreButtons) {
+    button.setAttribute("aria-pressed", String(value !== "" && Number(value) === Number(button.dataset.score)));
+  }
 }
 
 function renderPaper(nextPaper) {
@@ -639,9 +643,7 @@ grade.addEventListener("input", () => {
 keypad.addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button || phase !== "playing") return;
-  if (button.dataset.edit === "clear") setGrade("");
-  else if (button.dataset.edit === "back") setGrade(grade.value.slice(0, -1));
-  else if (grade.value.length < 3) setGrade(grade.value + button.dataset.digit);
+  setGrade(button.dataset.score ?? "");
   message();
 });
 
