@@ -468,7 +468,7 @@ let tapStart;
 let previousTap;
 
 gamePage.addEventListener("touchstart", event => {
-  if (event.touches.length !== 1) {
+  if (event.target === ink || event.touches.length !== 1) {
     tapStart = previousTap = undefined;
     return;
   }
@@ -479,7 +479,7 @@ gamePage.addEventListener("touchend", event => {
   const start = tapStart;
   tapStart = undefined;
   const touch = event.changedTouches[0];
-  if (!start || !touch || event.touches.length || touch.identifier !== start.identifier ||
+  if (event.target === ink || !start || !touch || event.touches.length || touch.identifier !== start.identifier ||
       Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY) > 10) {
     previousTap = undefined;
     return;
@@ -532,10 +532,14 @@ ink.addEventListener("pointerdown", event => {
   const isPen = event.pointerType === "pen";
   if (!isPen && !event.isPrimary) return;
   if (activeStroke) {
-    if (!isPen || activeStroke.pointerType !== "touch") return;
-    // An unfinished finger contact should not block a pen that reaches the paper.
-    if (ink.hasPointerCapture(activePointer)) ink.releasePointerCapture(activePointer);
-    strokes.pop();
+    const penReplacesTouch = isPen && activeStroke.pointerType === "touch";
+    const newPenStroke = isPen && activeStroke.pointerType === "pen";
+    if (event.pointerId !== activePointer && !penReplacesTouch && !newPenStroke) return;
+    if (event.pointerId !== activePointer && ink.hasPointerCapture(activePointer)) {
+      ink.releasePointerCapture(activePointer);
+    }
+    // A new pen-down also ends a stroke whose lift was missed by the browser.
+    if (penReplacesTouch) strokes.pop();
   }
   activePointer = event.pointerId;
   activeStroke = { points: [point(event)], tool, pointerType: event.pointerType };
@@ -567,9 +571,11 @@ function finishStroke(event) {
   redrawInk();
 }
 
-window.addEventListener("pointerup", finishStroke);
-window.addEventListener("pointercancel", finishStroke);
-ink.addEventListener("lostpointercapture", finishStroke);
+window.addEventListener("pointerup", finishStroke, true);
+window.addEventListener("pointercancel", finishStroke, true);
+ink.addEventListener("lostpointercapture", event => {
+  if (!ink.hasPointerCapture(event.pointerId)) finishStroke(event);
+});
 function selectTool(nextTool) {
   tool = nextTool;
   ink.classList.toggle("eraser-active", tool === "eraser");
