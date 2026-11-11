@@ -242,7 +242,7 @@ get("grade-form").addEventListener("submit", async event => {
     }
     if (!round.practice) deadline = performance.now() + data.remainingMs;
     get("count").textContent = String(data.count).padStart(2, "0");
-    if (round.mode === "multi") {
+    if (data.subject !== round.subject) {
       round.subject = data.subject;
       round.key = data.key;
       round.prompts = data.prompts;
@@ -458,6 +458,50 @@ function clearInk() {
   updateControls();
 }
 
+const gamePage = get("game-page");
+let tapStart;
+let previousTap;
+
+gamePage.addEventListener("touchstart", event => {
+  if (event.touches.length !== 1) {
+    tapStart = previousTap = undefined;
+    return;
+  }
+  tapStart = event.touches[0];
+}, { passive: true });
+
+gamePage.addEventListener("touchend", event => {
+  const start = tapStart;
+  tapStart = undefined;
+  const touch = event.changedTouches[0];
+  if (!start || !touch || event.touches.length || touch.identifier !== start.identifier ||
+      Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY) > 10) {
+    previousTap = undefined;
+    return;
+  }
+
+  const now = performance.now();
+  const isDoubleTap = previousTap && now - previousTap.time < 350 &&
+    Math.hypot(touch.clientX - previousTap.x, touch.clientY - previousTap.y) < 24;
+  previousTap = isDoubleTap ? undefined : { time: now, x: touch.clientX, y: touch.clientY };
+  if (!isDoubleTap || !event.cancelable) return;
+
+  event.preventDefault();
+  // Keep the second keypress even when its native click is canceled with the zoom gesture.
+  event.target.closest("button")?.click();
+}, { passive: false });
+
+gamePage.addEventListener("touchcancel", () => {
+  tapStart = previousTap = undefined;
+});
+
+const viewport = window.visualViewport;
+if (viewport) {
+  const allowPinchRecovery = () => ink.classList.toggle("viewport-zoomed", viewport.scale > 1.01);
+  viewport.addEventListener("resize", allowPinchRecovery);
+  allowPinchRecovery();
+}
+
 ink.addEventListener("contextmenu", event => event.preventDefault());
 ink.addEventListener("pointerdown", event => {
   event.preventDefault();
@@ -542,7 +586,8 @@ submit.addEventListener("click", () => {
 
 for (const id of ["answer-key", "student-answers"]) renderExam(get(id), [], []);
 grade.addEventListener("input", () => {
-  setGrade(grade.value.replace(/[^0-9]/g, "").slice(0, 3));
+  const digits = grade.value.replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xff10));
+  setGrade(digits.replace(/[^0-9]/g, "").slice(0, 3));
   message();
 });
 keypad.addEventListener("click", event => {

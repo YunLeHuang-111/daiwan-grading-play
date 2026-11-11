@@ -115,7 +115,7 @@ const browserGame = (() => {
     if (number !== round.paper.number) throw new Error("這張考卷已交件，請重新開始。");
     const expected = 10 * round.paper.answers.filter((answer, index) => answer === round.key[index]).length;
     round.grades.push({ number, entered, expected });
-    if (round.mode === "multi" && banks.length > 1) {
+    if (round.mode !== "timed" && banks.length > 1) {
       selectBank(pick(banks.filter(bank => bank.subject !== round.subject)));
     }
     round.paper = nextPaper();

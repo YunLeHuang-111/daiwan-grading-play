@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6dbac">
   <title>老師，我幾分！｜呆丸改考卷模擬器</title>
-  <link rel="stylesheet" href="./style.css?v=touch-zoom">
+  <link rel="stylesheet" href="./style.css?v=practice-zoom">
   <script src="./achievements.js?v=three-modes" defer></script>
-  <script src="./browser-game.js?v=three-modes" defer></script>
-  <script src="./game.js?v=mustard-clock" defer></script>
+  <script src="./browser-game.js?v=practice-zoom" defer></script>
+  <script src="./game.js?v=practice-zoom" defer></script>
 </head>
 <body>
   <main class="desk" id="game-page">
@@ -54,8 +54,8 @@
       </div>
       <div class="grading-body">
         <div class="score-controls">
-          <span class="calculator-label">得分</span>
-          <div class="score-screen" id="score-preview" aria-live="polite">—</div>
+          <span class="calculator-label" id="score-label">送出分數</span>
+          <div class="score-screen" id="score-preview" role="status" aria-labelledby="score-label">—</div>
         </div>
         <fieldset class="keypad" id="keypad" disabled>
           <legend class="visually-hidden">計分鍵盤</legend>
@@ -129,11 +129,11 @@
     <h2 id="tutorial-title">老師，今天怎麼改？</h2>
     <p class="tablet-tip"><strong>建議用平板遊玩。</strong> 直拿就能並排對照兩張卷，也可以用手指或手寫筆畫記。</p>
     <ol class="tutorial-steps">
-      <li><strong>對答案</strong><span>比對答案卷的紅字與學生卷的藍字。多科模式交卷後會換科。</span></li>
+      <li><strong>對答案</strong><span>比對答案卷的紅字與學生卷的藍字。多科和練習模式交卷後會換科。</span></li>
       <li><strong>畫紅筆</strong><span>在學生考卷上畫記，畫錯了可以用橡皮擦。</span></li>
-      <li><strong>給分交卷</strong><span>每題 10 分。填好總分，再按「下一張」交件。</span></li>
+      <li><strong>給分交卷</strong><span>每題 10 分。用鍵盤填總分，確認「送出分數」後按「下一張」。紙上的手寫是筆跡。</span></li>
     </ol>
-    <p class="tutorial-modes">單科 1 分鐘，多科 2 分鐘且每張換科，練習不限時。選好模式後，點學生考卷上的「開始閱卷」。</p>
+    <p class="tutorial-modes">單科 1 分鐘，多科 2 分鐘且每張換科，練習不限時且每張換科。若畫面放大，用兩指向內捏合即可縮回。</p>
     <form method="dialog" class="tutorial-actions"><button type="submit" class="primary">知道了</button></form>
   </dialog>
   <main id="results" class="desk result-page" aria-labelledby="result-title" hidden>
