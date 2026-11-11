@@ -27,6 +27,11 @@ body {
     linear-gradient(135deg, #f8e6bd, #efcd9d);
   background-size: auto, 600px 160px, auto, auto;
 }
+body.grading-in-progress, body.grading-in-progress * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 button, input { font: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 button:disabled { opacity: .5; cursor: default; }
@@ -88,7 +93,6 @@ progress::-moz-progress-bar { background: #683b38; }
 .value-col { width: 11.7%; }
 .name-col { width: 22.2%; }
 #grade { display: block; width: 100%; height: 32px; padding: 0; border: 0; background: #fff; color: var(--red); text-align: center; font: 800 max(16px, 1.06rem) ui-monospace, monospace; }
-#grade { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 #grade:focus-visible { outline-offset: -2px; }
 .question-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .sheet-group { min-width: 0; padding: 7px 6px 4px 0; }

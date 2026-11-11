@@ -142,6 +142,8 @@ function renderPaper(nextPaper) {
 
 function updateControls() {
   const editable = phase === "playing";
+  document.body.classList.toggle("grading-in-progress", editable || phase === "submitting" || phase === "finishing");
+  clearPageSelection();
   const canChoose = phase === "ready" || phase === "finished";
   for (const button of modeButtons) button.disabled = !canChoose;
   get("restart").disabled = start.disabled = !canChoose;
@@ -502,14 +504,22 @@ if (viewport) {
   allowPinchRecovery();
 }
 
-ink.addEventListener("contextmenu", event => event.preventDefault());
+function clearPageSelection() {
+  if (!document.body.classList.contains("grading-in-progress")) return;
+  const selection = window.getSelection();
+  if (selection && !selection.isCollapsed) selection.removeAllRanges();
+}
+
+function preventSelectionGesture(event) {
+  if (document.body.classList.contains("grading-in-progress")) event.preventDefault();
+}
+
+document.addEventListener("selectstart", preventSelectionGesture);
+document.addEventListener("contextmenu", preventSelectionGesture);
+document.addEventListener("selectionchange", clearPageSelection);
 ink.addEventListener("pointerdown", event => {
   event.preventDefault();
   if (phase !== "playing" || activeStroke || event.button !== 0 || !event.isPrimary) return;
-  const selection = window.getSelection();
-  if (selection?.anchorNode && ink.closest(".paper").contains(selection.anchorNode)) {
-    selection.removeAllRanges();
-  }
   ink.setPointerCapture(event.pointerId);
   activePointer = event.pointerId;
   activeStroke = { points: [point(event)], tool };
