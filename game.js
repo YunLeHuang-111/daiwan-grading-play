@@ -526,15 +526,12 @@ document.addEventListener("contextmenu", preventSelectionGesture);
 document.addEventListener("selectionchange", clearPageSelection);
 function appendInkPoint(event, box) {
   const [x, y] = point(event, box);
-  const [lastX, lastY] = activeStroke.points.at(-1);
+  const [lastX, lastY] = activeStroke.points[activeStroke.points.length - 1];
   if (x !== lastX || y !== lastY) activeStroke.points.push([x, y]);
 }
 
-ink.addEventListener("pointerdown", event => {
-  event.preventDefault();
-  if (phase !== "playing" || event.button !== 0) return;
+function beginStroke(event) {
   const isPen = event.pointerType === "pen";
-  if (!isPen && !event.isPrimary) return;
   if (activeStroke) {
     const penReplacesTouch = isPen && activeStroke.pointerType === "touch";
     const newPenStroke = isPen && activeStroke.pointerType === "pen";
@@ -555,10 +552,25 @@ ink.addEventListener("pointerdown", event => {
   }
   redrawInk();
   updateControls();
+}
+
+ink.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  if (phase === "playing" && event.button === 0) beginStroke(event);
 });
 
 ink.addEventListener("pointermove", event => {
-  if (event.pointerId !== activePointer || phase !== "playing") return;
+  if (phase !== "playing") return;
+  if (event.pointerType === "pen") {
+    const touching = (event.buttons & 1) !== 0 || event.pressure > 0;
+    if (!touching) {
+      finishStroke(event);
+      return;
+    }
+    // Recover when a browser reports pen movement in contact without a pen-down.
+    if (event.pointerId !== activePointer) beginStroke(event);
+  }
+  if (event.pointerId !== activePointer) return;
   const box = ink.getBoundingClientRect();
   for (const sample of event.getCoalescedEvents?.() || []) appendInkPoint(sample, box);
   appendInkPoint(event, box);
@@ -578,7 +590,7 @@ function finishStroke(event) {
 window.addEventListener("pointerup", finishStroke, true);
 window.addEventListener("pointercancel", finishStroke, true);
 ink.addEventListener("lostpointercapture", event => {
-  if (!ink.hasPointerCapture(event.pointerId)) finishStroke(event);
+  if (activeStroke?.pointerType !== "pen" && !ink.hasPointerCapture(event.pointerId)) finishStroke(event);
 });
 function selectTool(nextTool) {
   tool = nextTool;
