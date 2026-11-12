@@ -172,6 +172,7 @@ function renderPaper(nextPaper) {
   renderStudent();
   setGrade(null);
   clearInk();
+  fitPhonePaper();
   resizeInk();
 }
 
@@ -452,12 +453,15 @@ function fitPhonePaper() {
   const studentPaper = sheet.querySelector(".paper");
   const reference = get("key-sheet");
   const prompts = get("answer-key");
-  sheet.style.setProperty("--phone-paper-width", `${sheet.clientWidth}px`);
   const workspaceTop = workspace.getBoundingClientRect().top + window.scrollY;
   const gap = parseFloat(getComputedStyle(workspace).rowGap);
   const collapsedKeyHeight = reference.offsetHeight - (prompts.offsetHeight ? prompts.offsetHeight + 6 : 0);
   const available = document.documentElement.clientHeight - workspaceTop - collapsedKeyHeight - gap - 8;
-  const scale = Math.min(1, Math.max(.4, available / studentPaper.offsetHeight));
+  // Measure the paper before its visual transform so fitting cannot change line wraps.
+  const paperHeight = studentPaper.offsetHeight;
+  if (!paperHeight) return;
+  const scale = Math.min(1, Math.max(.4, available / paperHeight));
+  sheet.style.setProperty("--phone-paper-height", `${Math.ceil(paperHeight * scale)}px`);
   if (sheet.style.getPropertyValue("--phone-paper-scale") !== String(scale)) {
     sheet.style.setProperty("--phone-paper-scale", scale);
     if (!ink.hidden) resizeInk();
