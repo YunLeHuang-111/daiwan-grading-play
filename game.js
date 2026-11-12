@@ -25,6 +25,7 @@ let phase = "ready";
 let strokes = [];
 let activeStroke;
 let activePointer;
+let stylusTouchId = null;
 let tool = "pen";
 const practiceFinish = get("finish-practice");
 const reviewedPapers = new Map();
@@ -449,6 +450,7 @@ function clearInk() {
   strokes = [];
   activeStroke = undefined;
   activePointer = undefined;
+  stylusTouchId = null;
   redrawInk();
   updateControls();
 }
@@ -516,7 +518,7 @@ function appendInkPoint(event, box) {
   if (x !== lastX || y !== lastY) activeStroke.points.push([x, y]);
 }
 
-function beginStroke(event) {
+function beginStroke(event, capture = true) {
   const isPen = event.pointerType === "pen";
   let removedTouch = false;
   if (activeStroke) {
@@ -535,10 +537,12 @@ function beginStroke(event) {
   activePointer = event.pointerId;
   activeStroke = { points: [point(event)], tool, pointerType: event.pointerType };
   strokes.push(activeStroke);
-  try {
-    ink.setPointerCapture(event.pointerId);
-  } catch (error) {
-    if (error.name !== "NotFoundError") throw error;
+  if (capture) {
+    try {
+      ink.setPointerCapture(event.pointerId);
+    } catch (error) {
+      if (error.name !== "NotFoundError") throw error;
+    }
   }
   if (removedTouch) redrawInk();
   else paintInk(activeStroke, ink.getBoundingClientRect());
@@ -547,7 +551,7 @@ function beginStroke(event) {
 
 ink.addEventListener("pointerdown", event => {
   event.preventDefault();
-  if (phase === "playing" && event.button === 0) beginStroke(event);
+  if (phase === "playing" && stylusTouchId === null && event.button === 0) beginStroke(event);
 });
 
 function penInContact(event) {
@@ -555,7 +559,8 @@ function penInContact(event) {
 }
 
 window.addEventListener("pointermove", event => {
-  if (phase !== "playing" || (event.target !== ink && event.pointerId !== activePointer)) return;
+  if (phase !== "playing" || stylusTouchId !== null ||
+      (event.target !== ink && event.pointerId !== activePointer)) return;
   const samples = [...(event.getCoalescedEvents?.() || []), event];
   const points = event.pointerType === "pen" ? samples.filter(penInContact) : samples;
   if (event.pointerType === "pen" && points.length && event.pointerId !== activePointer) {
@@ -570,7 +575,7 @@ window.addEventListener("pointermove", event => {
 }, true);
 
 function finishStroke(event) {
-  if (event.pointerId !== activePointer) return;
+  if (stylusTouchId !== null || event.pointerId !== activePointer) return;
   if (event.type === "pointerup" && phase === "playing") {
     const box = ink.getBoundingClientRect();
     const start = activeStroke.points.length - 1;
@@ -586,6 +591,45 @@ window.addEventListener("pointercancel", finishStroke, true);
 ink.addEventListener("lostpointercapture", event => {
   if (activeStroke?.pointerType !== "pen" && !ink.hasPointerCapture(event.pointerId)) finishStroke(event);
 });
+// Safari can report Apple Pencil contact through Touch Events as well as Pointer Events.
+ink.addEventListener("touchstart", event => {
+  if (phase !== "playing") return;
+  const touch = Array.from(event.changedTouches).find(contact => contact.touchType === "stylus");
+  if (!touch) return;
+  event.preventDefault();
+  stylusTouchId = touch.identifier;
+  const box = ink.getBoundingClientRect();
+  const [x, y] = point(touch, box);
+  const previous = activeStroke?.points[0];
+  const alreadyStarted = activeStroke?.pointerType === "pen" && activeStroke.points.length === 1 &&
+    Math.hypot((x - previous[0]) * box.width, (y - previous[1]) * box.height) < 3;
+  if (!alreadyStarted) {
+    beginStroke({ pointerType: "pen", pointerId: -1, clientX: touch.clientX, clientY: touch.clientY }, false);
+  }
+}, { passive: false });
+
+function updateStylusTouch(event) {
+  if (stylusTouchId === null) return;
+  const touch = Array.from(event.changedTouches).find(contact => contact.identifier === stylusTouchId);
+  if (!touch) return;
+  if (event.cancelable) event.preventDefault();
+  if (activeStroke && phase === "playing" && event.type !== "touchcancel") {
+    const box = ink.getBoundingClientRect();
+    const start = activeStroke.points.length - 1;
+    appendInkPoint(touch, box);
+    if (activeStroke.points.length > start + 1) paintInk(activeStroke, box, start);
+  }
+  if (event.type !== "touchmove") {
+    stylusTouchId = null;
+    activeStroke = undefined;
+    activePointer = undefined;
+  }
+}
+
+for (const type of ["touchmove", "touchend", "touchcancel"]) {
+  ink.addEventListener(type, updateStylusTouch, { passive: false });
+}
+
 function selectTool(nextTool) {
   tool = nextTool;
   ink.classList.toggle("eraser-active", tool === "eraser");
@@ -599,6 +643,7 @@ updateClock(60000);
 get("undo").addEventListener("click", () => {
   activeStroke = undefined;
   activePointer = undefined;
+  stylusTouchId = null;
   strokes.pop();
   redrawInk();
   updateControls();
