@@ -533,8 +533,19 @@ gamePage.addEventListener("touchstart", event => {
 gamePage.addEventListener("touchend", event => {
   const start = tapStart;
   tapStart = undefined;
+  if (event.target === ink) {
+    previousTap = undefined;
+    // Short strokes can look like taps when the browser handles touch release.
+    if (phoneLayout && phase === "playing" && event.cancelable &&
+        event.touches.length === 0 && event.changedTouches.length === 1 &&
+        !ink.classList.contains("viewport-zoomed")) {
+      event.preventDefault();
+    }
+    return;
+  }
+
   const touch = event.changedTouches[0];
-  if (event.target === ink || !start || !touch || event.touches.length || touch.identifier !== start.identifier ||
+  if (!start || !touch || event.touches.length || touch.identifier !== start.identifier ||
       Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY) > 10) {
     previousTap = undefined;
     return;
