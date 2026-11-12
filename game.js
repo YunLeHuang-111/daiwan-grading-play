@@ -7,17 +7,7 @@ for (const id of ["key-heading", "student-heading"]) {
   get(id).append(get("exam-heading").content.cloneNode(true));
 }
 const field = (heading, name) => get(heading).querySelector(`[data-field="${name}"]`);
-const grade = document.createElement("input");
-grade.id = "grade";
-grade.type = "text";
-grade.inputMode = "numeric";
-grade.pattern = "[0-9]{1,3}";
-grade.maxLength = 3;
-grade.autocomplete = "off";
-grade.required = true;
-grade.disabled = true;
-grade.setAttribute("aria-label", "考卷得分，滿分 100");
-field("student-heading", "score").append(grade);
+let selectedScore = null;
 const keypad = get("keypad");
 const scoreButtons = keypad.querySelectorAll("[data-score]");
 const modeButtons = document.querySelectorAll(".mode-buttons button");
@@ -127,10 +117,10 @@ function renderKey() {
 }
 
 function setGrade(value) {
-  grade.value = value;
-  get("score-preview").textContent = value || "—";
+  selectedScore = value;
+  get("score-preview").textContent = value ?? "—";
   for (const button of scoreButtons) {
-    button.setAttribute("aria-pressed", String(value !== "" && Number(value) === Number(button.dataset.score)));
+    button.setAttribute("aria-pressed", String(value === Number(button.dataset.score)));
   }
 }
 
@@ -140,7 +130,7 @@ function renderPaper(nextPaper) {
   field("student-heading", "seat").textContent = String(paper.number).padStart(2, "0");
   field("student-heading", "name").textContent = paper.name;
   renderExam(get("student-answers"), paper.answers, round.prompts);
-  setGrade("");
+  setGrade(null);
   clearInk();
   resizeInk();
 }
@@ -153,7 +143,6 @@ function updateControls() {
   for (const button of modeButtons) button.disabled = !canChoose;
   get("restart").disabled = start.disabled = !canChoose;
   get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
-  grade.disabled = !editable;
   submit.disabled = !editable;
   keypad.disabled = !editable;
   practiceFinish.disabled = !editable;
@@ -231,9 +220,9 @@ get("grade-form").addEventListener("submit", async event => {
     finish();
     return;
   }
-  const score = Number(grade.value);
-  if (!/^[0-9]{1,3}$/.test(grade.value) || score > 100) {
-    message(grade.value ? "請填入 0 到 100 的整數。" : "請先填寫這張考卷的分數。");
+  const score = selectedScore;
+  if (score === null) {
+    message("請先選擇這張考卷的送出分數。");
     return;
   }
 
@@ -297,11 +286,6 @@ function rememberPaper(score) {
   const copy = original.cloneNode(true);
   copy.querySelector(".start-panel").remove();
   copy.querySelectorAll("[id]").forEach(element => element.removeAttribute("id"));
-  const input = copy.querySelector("input");
-  const scoreLabel = document.createElement("strong");
-  scoreLabel.className = "review-score";
-  scoreLabel.textContent = score;
-  input.replaceWith(scoreLabel);
   const canvas = copy.querySelector("canvas");
   if (strokes.length) {
     if (inkFrame) redrawInk();
@@ -647,15 +631,10 @@ submit.addEventListener("click", () => {
 });
 
 for (const id of ["answer-key", "student-answers"]) renderExam(get(id), [], []);
-grade.addEventListener("input", () => {
-  const digits = grade.value.replace(/[０-９]/g, digit => String(digit.charCodeAt(0) - 0xff10));
-  setGrade(digits.replace(/[^0-9]/g, "").slice(0, 3));
-  message();
-});
 keypad.addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button || phase !== "playing") return;
-  setGrade(button.dataset.score ?? "");
+  setGrade(button.dataset.score === undefined ? null : Number(button.dataset.score));
   message();
 });
 
