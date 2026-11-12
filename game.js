@@ -669,7 +669,13 @@ ink.addEventListener("lostpointercapture", event => {
 ink.addEventListener("touchstart", event => {
   if (phase !== "playing") return;
   const touch = Array.from(event.changedTouches).find(contact => contact.touchType === "stylus");
-  if (!touch) return;
+  if (!touch) {
+    // Stop native long-press selection at contact while Pointer Events draw the stroke.
+    if (phoneLayout && event.touches.length === 1 && !ink.classList.contains("viewport-zoomed")) {
+      event.preventDefault();
+    }
+    return;
+  }
   event.preventDefault();
   stylusTouchId = touch.identifier;
   const box = ink.getBoundingClientRect();

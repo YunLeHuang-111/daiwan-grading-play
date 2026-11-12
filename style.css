@@ -357,6 +357,8 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
 .answer-key-strip, .short-mode-label { display: none; }
 .phone-layout { max-width: 560px; padding-top: 8px; }
 .grading-in-progress .phone-layout:not(.viewport-zoomed) { touch-action: pan-x pan-y; }
+.grading-in-progress .phone-layout { -webkit-tap-highlight-color: transparent; }
+.grading-in-progress .phone-layout ::selection { background: transparent; }
 .phone-layout .intro h1 { font-size: clamp(1.55rem, 6.5vw, 2.2rem); }
 .phone-layout .intro p:last-child { display: none; }
 .phone-layout .clock-card { width: 77px; padding: 3px 5px; }
