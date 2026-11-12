@@ -25,7 +25,6 @@ let phase = "ready";
 let strokes = [];
 let activeStroke;
 let activePointer;
-let inkFrame = 0;
 let tool = "pen";
 const practiceFinish = get("finish-practice");
 const reviewedPapers = new Map();
@@ -288,7 +287,6 @@ function rememberPaper(score) {
   copy.querySelectorAll("[id]").forEach(element => element.removeAttribute("id"));
   const canvas = copy.querySelector("canvas");
   if (strokes.length) {
-    if (inkFrame) redrawInk();
     const annotation = document.createElement("img");
     annotation.className = "review-ink";
     annotation.src = ink.toDataURL();
@@ -415,28 +413,32 @@ function resizeInk() {
   redrawInk();
 }
 
-function redrawInk() {
-  if (inkFrame) cancelAnimationFrame(inkFrame);
-  inkFrame = 0;
-  const { width, height } = ink.getBoundingClientRect();
-  ctx.clearRect(0, 0, width, height);
+function paintInk(stroke, { width, height }, from = 0) {
+  const { points, tool: strokeTool } = stroke;
   ctx.strokeStyle = ctx.fillStyle = "#bb3028";
   ctx.lineCap = ctx.lineJoin = "round";
-  for (const { points, tool: strokeTool } of strokes) {
-    ctx.globalCompositeOperation = strokeTool === "eraser" ? "destination-out" : "source-over";
-    ctx.lineWidth = strokeTool === "eraser" ? 22 : 2.7;
-    ctx.beginPath();
-    const [x, y] = points[0];
-    if (points.length === 1) {
-      ctx.arc(x * width, y * height, ctx.lineWidth / 2, 0, Math.PI * 2);
-      ctx.fill();
-      continue;
-    }
+  ctx.globalCompositeOperation = strokeTool === "eraser" ? "destination-out" : "source-over";
+  ctx.lineWidth = strokeTool === "eraser" ? 22 : 2.7;
+  ctx.beginPath();
+  const [x, y] = points[from];
+  if (points.length === 1) {
+    ctx.arc(x * width, y * height, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
     ctx.moveTo(x * width, y * height);
-    for (const [px, py] of points.slice(1)) ctx.lineTo(px * width, py * height);
+    for (let i = from + 1; i < points.length; i++) {
+      const [px, py] = points[i];
+      ctx.lineTo(px * width, py * height);
+    }
     ctx.stroke();
   }
   ctx.globalCompositeOperation = "source-over";
+}
+
+function redrawInk() {
+  const box = ink.getBoundingClientRect();
+  ctx.clearRect(0, 0, box.width, box.height);
+  for (const stroke of strokes) paintInk(stroke, box);
 }
 
 function point(event, box = ink.getBoundingClientRect()) {
@@ -516,6 +518,7 @@ function appendInkPoint(event, box) {
 
 function beginStroke(event) {
   const isPen = event.pointerType === "pen";
+  let removedTouch = false;
   if (activeStroke) {
     const penReplacesTouch = isPen && activeStroke.pointerType === "touch";
     const newPenStroke = isPen && activeStroke.pointerType === "pen";
@@ -524,7 +527,10 @@ function beginStroke(event) {
       ink.releasePointerCapture(activePointer);
     }
     // A new pen-down also ends a stroke whose lift was missed by the browser.
-    if (penReplacesTouch) strokes.pop();
+    if (penReplacesTouch) {
+      strokes.pop();
+      removedTouch = true;
+    }
   }
   activePointer = event.pointerId;
   activeStroke = { points: [point(event)], tool, pointerType: event.pointerType };
@@ -534,7 +540,8 @@ function beginStroke(event) {
   } catch (error) {
     if (error.name !== "NotFoundError") throw error;
   }
-  redrawInk();
+  if (removedTouch) redrawInk();
+  else paintInk(activeStroke, ink.getBoundingClientRect());
   updateControls();
 }
 
@@ -543,32 +550,35 @@ ink.addEventListener("pointerdown", event => {
   if (phase === "playing" && event.button === 0) beginStroke(event);
 });
 
-ink.addEventListener("pointermove", event => {
-  if (phase !== "playing") return;
-  if (event.pointerType === "pen") {
-    const touching = (event.buttons & 1) !== 0 || event.pressure > 0;
-    if (!touching) {
-      finishStroke(event);
-      return;
-    }
-    // Recover when a browser reports pen movement in contact without a pen-down.
-    if (event.pointerId !== activePointer) beginStroke(event);
+function penInContact(event) {
+  return (event.buttons & 1) !== 0 || event.pressure > 0;
+}
+
+window.addEventListener("pointermove", event => {
+  if (phase !== "playing" || (event.target !== ink && event.pointerId !== activePointer)) return;
+  const samples = [...(event.getCoalescedEvents?.() || []), event];
+  const points = event.pointerType === "pen" ? samples.filter(penInContact) : samples;
+  if (event.pointerType === "pen" && points.length && event.pointerId !== activePointer) {
+    beginStroke(points[0]);
   }
   if (event.pointerId !== activePointer) return;
   const box = ink.getBoundingClientRect();
-  for (const sample of event.getCoalescedEvents?.() || []) appendInkPoint(sample, box);
-  appendInkPoint(event, box);
-  if (!inkFrame) inkFrame = requestAnimationFrame(redrawInk);
-});
+  const start = activeStroke.points.length - 1;
+  for (const sample of points) appendInkPoint(sample, box);
+  if (activeStroke.points.length > start + 1) paintInk(activeStroke, box, start);
+  if (event.pointerType === "pen" && !penInContact(event)) finishStroke(event);
+}, true);
 
 function finishStroke(event) {
   if (event.pointerId !== activePointer) return;
   if (event.type === "pointerup" && phase === "playing") {
-    appendInkPoint(event, ink.getBoundingClientRect());
+    const box = ink.getBoundingClientRect();
+    const start = activeStroke.points.length - 1;
+    appendInkPoint(event, box);
+    if (activeStroke.points.length > start + 1) paintInk(activeStroke, box, start);
   }
   activeStroke = undefined;
   activePointer = undefined;
-  redrawInk();
 }
 
 window.addEventListener("pointerup", finishStroke, true);
