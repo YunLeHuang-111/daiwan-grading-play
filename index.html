@@ -16,10 +16,10 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="木桌上的直式考卷和紅筆，旁邊寫著呆丸國中・段考閱卷室與老師，我幾分！">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="./style.css?v=manual-score">
+  <link rel="stylesheet" href="./style.css?v=tutorial-red-tip">
   <script src="./achievements.js?v=three-modes" defer></script>
   <script src="./browser-game.js?v=practice-zoom" defer></script>
-  <script src="./game.js?v=stylus-touch" defer></script>
+  <script src="./game.js?v=tutorial-layout-buttons" defer></script>
 </head>
 <body>
   <main class="desk" id="game-page">
@@ -39,9 +39,9 @@
     </header>
     <div class="lobby-tools">
       <div class="mode-buttons" role="group" aria-label="選擇遊玩模式">
-        <button type="button" data-mode="timed" aria-pressed="true"><strong>單科模式</strong></button>
-        <button type="button" data-mode="multi" aria-pressed="false"><strong>多科模式</strong></button>
-        <button type="button" data-mode="practice" aria-pressed="false"><strong>練習模式</strong></button>
+        <button type="button" data-mode="timed" aria-pressed="true"><strong><span class="full-mode-label">單科模式</span><span class="short-mode-label">單科</span></strong></button>
+        <button type="button" data-mode="multi" aria-pressed="false"><strong><span class="full-mode-label">多科模式</span><span class="short-mode-label">多科</span></strong></button>
+        <button type="button" data-mode="practice" aria-pressed="false"><strong><span class="full-mode-label">練習模式</span><span class="short-mode-label">練習</span></strong></button>
       </div>
       <div class="desk-actions" aria-label="遊戲資訊">
         <button type="button" class="desk-button" id="open-tutorial" aria-haspopup="dialog" aria-controls="tutorial">遊戲玩法</button>
@@ -98,6 +98,13 @@
         </div>
         <div class="paper reference">
           <div id="key-heading"></div>
+          <div class="answer-key-strip">
+            <div class="answer-key-bar">
+              <strong>標準答案</strong>
+              <button type="button" class="desk-button" id="toggle-key-prompts" aria-expanded="false" aria-controls="answer-key">展開題幹</button>
+            </div>
+            <ol id="quick-answers" aria-label="第 1 到 10 題的標準答案"></ol>
+          </div>
           <div class="question-columns" id="answer-key"></div>
           <div class="paper-page">第 1 頁，共 1 頁</div>
         </div>
@@ -111,7 +118,7 @@
             <div id="student-heading"></div>
           </form>
           <div class="question-columns" id="student-answers"></div>
-          <canvas id="ink" aria-label="可用滑鼠、觸控或手寫筆在整張學生考卷上畫紅筆註記" hidden></canvas>
+          <canvas id="ink" aria-label="可用滑鼠、觸控或手寫筆在學生的作答上畫紅筆註記" hidden></canvas>
           <div class="paper-page">第 1 頁，共 1 頁</div>
           <div id="start-panel" class="start-panel">
             <h3>老師，準備好了嗎？</h3>
@@ -138,14 +145,21 @@
   <dialog id="tutorial" aria-labelledby="tutorial-title">
     <p class="eyebrow guide-label">呆丸國中 ／ 閱卷小抄</p>
     <h2 id="tutorial-title">老師，今天怎麼改？</h2>
-    <p class="tablet-tip"><strong>建議用平板遊玩。</strong> 直拿就能並排對照兩張卷，也可以用手指或手寫筆畫記。</p>
+    <div class="layout-buttons" role="group" aria-label="閱卷版面">
+      <button type="button" class="desk-button" data-layout="phone" aria-pressed="false">手機版</button>
+      <button type="button" class="desk-button" data-layout="tablet" aria-pressed="false">平板版</button>
+    </div>
+    <p class="tutorial-device-tip">建議使用平板遊玩。</p>
     <ol class="tutorial-steps">
-      <li><strong>對答案</strong><span>比對答案卷的紅字與學生卷的藍字。多科和練習模式交卷後會換科。</span></li>
-      <li><strong>畫紅筆</strong><span>在學生考卷上畫記，畫錯了可以用橡皮擦。</span></li>
+      <li><strong>對答案</strong><span>按題號比對標準答案的紅字與學生作答的藍字。多科和練習模式交卷後會換科。</span></li>
+      <li><strong>畫紅筆</strong><span>在學生的作答上畫記，畫錯了可以用橡皮擦。</span></li>
       <li><strong>給分交卷</strong><span>每題 10 分。點選總分，確認「送出分數」後按「下一張」。</span></li>
     </ol>
     <p class="tutorial-modes">單科 1 分鐘，多科 2 分鐘且每張換科，練習不限時且每張換科。若畫面放大，用兩指向內捏合即可縮回。</p>
-    <form method="dialog" class="tutorial-actions"><button type="submit" class="primary">知道了</button></form>
+    <form method="dialog" class="tutorial-actions">
+      <small id="tutorial-credit">Created by LeleHuang</small>
+      <button type="submit" class="primary">知道了</button>
+    </form>
   </dialog>
   <main id="results" class="desk result-page" aria-labelledby="result-title" hidden>
     <header class="result-header">
@@ -194,10 +208,5 @@
     </div>
     <ol id="achievement-list" class="achievement-list"></ol>
   </dialog>
-  <footer class="site-footer">
-    <span>呆丸國中教務處</span>
-    <span>每題 10 分 · 交卷後才計入成績</span>
-    <span class="author-credit">作者 LeleHuang</span>
-  </footer>
 </body>
 </html>

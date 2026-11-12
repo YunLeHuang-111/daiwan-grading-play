@@ -11,6 +11,8 @@ let selectedScore = null;
 const keypad = get("keypad");
 const scoreButtons = keypad.querySelectorAll("[data-score]");
 const modeButtons = document.querySelectorAll(".mode-buttons button");
+const layoutButtons = document.querySelectorAll(".layout-buttons button");
+let phoneLayout;
 const start = get("start");
 let selectedMode = "timed";
 const submit = get("submit");
@@ -73,47 +75,88 @@ function displayMark(mark) {
   return mark === "O" ? "○" : mark === "X" ? "×" : mark;
 }
 
-function renderExam(container, marks, prompts) {
+function renderExam(container, marks, prompts, compactKey = false) {
   container.replaceChildren();
   answerTypes.forEach((title, index) => {
     const prefix = index === 0 ? "一" : "二";
-    const { section, list } = questionGroup(`${prefix}、${title}：每題 10 分，共 50 分`);
+    const { section, list } = questionGroup(compactKey ? title : `${prefix}、${title}：每題 10 分，共 50 分`);
     for (let i = index * 5; i < index * 5 + 5; i++) {
       const item = document.createElement("li");
       const slot = document.createElement("span");
       const mark = document.createElement("span");
-      const question = document.createElement("div");
       const number = document.createElement("span");
-      const prompt = document.createElement("span");
       slot.className = "answer-slot";
       mark.className = index === 1 ? "written-answer true-false-mark" : "written-answer";
-      question.className = "question-text";
       number.className = "q-number";
       slot.append("(", mark, ")");
       mark.textContent = displayMark(marks[i] || "");
       number.textContent = `${i + 1}. `;
+      list.append(item);
+      const question = document.createElement("div");
+      question.className = "question-text";
+      const prompt = document.createElement("span");
       const [stem, ...choices] = (prompts[i] || "").split("　");
       prompt.textContent = stem;
       const stemText = document.createElement("span");
       stemText.append(number, prompt);
       question.append(stemText);
-      if (choices.length) {
+      if (choices.length && !compactKey) {
         const options = document.createElement("span");
         options.className = "options";
         options.textContent = choices.join("　").replaceAll("／", " ");
         question.append(options);
       }
       item.append(slot, question);
-      list.append(item);
     }
     container.append(section);
   });
 }
 
+function renderQuickAnswers(marks = []) {
+  const items = Array.from({ length: 10 }, (_, index) => {
+    const item = document.createElement("li");
+    const number = document.createElement("span");
+    const answer = document.createElement("strong");
+    number.textContent = index + 1;
+    answer.textContent = displayMark(marks[index] || "–");
+    item.append(number, answer);
+    return item;
+  });
+  get("quick-answers").replaceChildren(...items);
+}
+
 function renderKey() {
   field("key-heading", "subject").textContent = round.subject;
   field("key-heading", "name").textContent = "標準答案";
-  renderExam(get("answer-key"), round.key, round.prompts);
+  if (phoneLayout) renderQuickAnswers(round.key);
+  renderExam(get("answer-key"), round.key, round.prompts, phoneLayout);
+}
+
+function renderStudent() {
+  const seat = String(paper.number).padStart(2, "0");
+  field("student-heading", "subject").textContent = round.subject;
+  field("student-heading", "seat").textContent = seat;
+  field("student-heading", "name").textContent = paper.name;
+  renderExam(get("student-answers"), paper.answers, round.prompts);
+}
+
+function setLayout(usePhoneLayout) {
+  phoneLayout = usePhoneLayout;
+  get("game-page").classList.toggle("phone-layout", phoneLayout);
+  get("key-sheet").querySelector(".paper").classList.toggle("answer-paper", phoneLayout);
+  get("student-sheet").querySelector(".paper").classList.toggle("compact-student-paper", phoneLayout);
+  for (const button of layoutButtons) {
+    button.setAttribute("aria-pressed", String((button.dataset.layout === "phone") === phoneLayout));
+  }
+  get("key-title").textContent = phoneLayout ? "標準答案紙" : "答案卷";
+  if (round && paper) {
+    renderKey();
+    renderStudent();
+  } else {
+    if (phoneLayout) renderQuickAnswers();
+    renderExam(get("answer-key"), [], [], phoneLayout);
+    renderExam(get("student-answers"), [], []);
+  }
 }
 
 function setGrade(value) {
@@ -126,10 +169,7 @@ function setGrade(value) {
 
 function renderPaper(nextPaper) {
   paper = nextPaper;
-  field("student-heading", "subject").textContent = round.subject;
-  field("student-heading", "seat").textContent = String(paper.number).padStart(2, "0");
-  field("student-heading", "name").textContent = paper.name;
-  renderExam(get("student-answers"), paper.answers, round.prompts);
+  renderStudent();
   setGrade(null);
   clearInk();
   resizeInk();
@@ -140,7 +180,7 @@ function updateControls() {
   document.body.classList.toggle("grading-in-progress", editable || phase === "submitting" || phase === "finishing");
   clearPageSelection();
   const canChoose = phase === "ready" || phase === "finished";
-  for (const button of modeButtons) button.disabled = !canChoose;
+  for (const button of [...modeButtons, ...layoutButtons]) button.disabled = !canChoose;
   get("restart").disabled = start.disabled = !canChoose;
   get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
   submit.disabled = !editable;
@@ -405,6 +445,25 @@ function showResults(data) {
   renderRoute();
 }
 
+function fitPhonePaper() {
+  if (!phoneLayout || gamePage.hidden) return;
+  const workspace = get("workspace");
+  const sheet = get("student-sheet");
+  const studentPaper = sheet.querySelector(".paper");
+  const reference = get("key-sheet");
+  const prompts = get("answer-key");
+  sheet.style.setProperty("--phone-paper-width", `${sheet.clientWidth}px`);
+  const workspaceTop = workspace.getBoundingClientRect().top + window.scrollY;
+  const gap = parseFloat(getComputedStyle(workspace).rowGap);
+  const collapsedKeyHeight = reference.offsetHeight - (prompts.offsetHeight ? prompts.offsetHeight + 6 : 0);
+  const available = document.documentElement.clientHeight - workspaceTop - collapsedKeyHeight - gap - 8;
+  const scale = Math.min(1, Math.max(.4, available / studentPaper.offsetHeight));
+  if (sheet.style.getPropertyValue("--phone-paper-scale") !== String(scale)) {
+    sheet.style.setProperty("--phone-paper-scale", scale);
+    if (!ink.hidden) resizeInk();
+  }
+}
+
 function resizeInk() {
   const box = ink.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
@@ -650,6 +709,11 @@ get("undo").addEventListener("click", () => {
 });
 get("clear").addEventListener("click", clearInk);
 new ResizeObserver(resizeInk).observe(ink);
+const phonePaperResize = new ResizeObserver(fitPhonePaper);
+for (const element of gamePage.querySelectorAll(".intro, .lobby-tools, #grading-tools, #key-sheet, #student-sheet .paper")) {
+  phonePaperResize.observe(element);
+}
+window.addEventListener("resize", fitPhonePaper);
 new ResizeObserver(([entry]) => {
   const height = entry.target.offsetHeight;
   document.body.style.setProperty("--grading-height", `${height}px`);
@@ -660,10 +724,19 @@ for (const button of modeButtons) {
     for (const option of modeButtons) {
       option.setAttribute("aria-pressed", String(option === button));
     }
-    get("selected-mode").textContent = button.textContent;
+    get("selected-mode").textContent = button.querySelector(".full-mode-label").textContent;
   });
 }
-get("open-tutorial").addEventListener("click", () => tutorial.showModal());
+get("toggle-key-prompts").addEventListener("click", event => {
+  const button = event.currentTarget;
+  const expanded = button.getAttribute("aria-expanded") === "false";
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? "收合題幹" : "展開題幹";
+});
+get("open-tutorial").addEventListener("click", () => {
+  get("tutorial-credit").hidden = true;
+  tutorial.showModal();
+});
 start.addEventListener("click", () => startRound(selectedMode));
 get("restart").addEventListener("click", () => {
   history.pushState(null, "", location.pathname + location.search);
@@ -685,7 +758,10 @@ submit.addEventListener("click", () => {
   }
 });
 
-for (const id of ["answer-key", "student-answers"]) renderExam(get(id), [], []);
+for (const button of layoutButtons) {
+  button.addEventListener("click", () => setLayout(button.dataset.layout === "phone"));
+}
+setLayout(matchMedia("(max-width: 680px), (max-height: 500px) and (pointer: coarse)").matches);
 keypad.addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button || phase !== "playing") return;
