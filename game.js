@@ -556,8 +556,19 @@ gamePage.addEventListener("touchcancel", () => {
 });
 
 const viewport = window.visualViewport;
+gamePage.addEventListener("gesturestart", event => {
+  // Keep the grading surface stable during Safari's native zoom gesture.
+  if (phoneLayout && document.body.classList.contains("grading-in-progress") && !gamePage.classList.contains("viewport-zoomed")) {
+    event.preventDefault();
+  }
+}, { passive: false });
+
 if (viewport) {
-  const allowPinchRecovery = () => ink.classList.toggle("viewport-zoomed", viewport.scale > 1.01);
+  const allowPinchRecovery = () => {
+    const zoomed = viewport.scale > 1.01;
+    gamePage.classList.toggle("viewport-zoomed", zoomed);
+    ink.classList.toggle("viewport-zoomed", zoomed);
+  };
   viewport.addEventListener("resize", allowPinchRecovery);
   allowPinchRecovery();
 }
