@@ -170,17 +170,6 @@ progress::-moz-progress-bar { background: #683b38; }
 #recognition-status { min-height: 1.35em; margin: 3px 0 5px; color: #654b37; font-size: .76rem; }
 .recognition-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .recognition-actions button { min-height: 32px; padding: 3px 7px; }
-#confirm-score { border-radius: 7px; }
-.keypad { display: grid; min-width: 0; grid-column: 1 / -1; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; border: 0; margin: 0; padding: 5px 0 0; }
-.keypad button {
-  min-width: 0; height: 44px; padding: 0; border: 1px solid #d2ab7e; border-radius: 7px;
-  box-shadow: 0 2px 0 #c9a376; background: #ffe5b7; color: #533823; font-size: 1.18rem; font-weight: 850;
-}
-.keypad button[data-edit] { background: #f8d7ca; border-color: #d1a096; color: #823e32; box-shadow: 0 2px 0 #c79a87; }
-.keypad button[data-edit="clear"] { font-size: .68rem; }
-.keypad button:not(:disabled):hover { background: #fff; }
-.keypad button[data-score][aria-pressed="true"] { background: #a63d36; border-color: #87322d; color: #fff; box-shadow: 0 2px 0 #87322d; }
-.keypad button:not(:disabled):active { transform: translateY(2px); box-shadow: none; }
 #submit {
   min-height: 60px; padding-inline: 7px; font-size: 1.13rem; background: #a63d36; border-color: #87322d;
   box-shadow: 0 2px 0 #87322d;
@@ -324,7 +313,6 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
   .grading-count { font-size: .9rem; }
   .grading-body { grid-template-columns: 70px minmax(0, 1fr) minmax(93px, auto); gap: 4px; }
   .recognition-controls { grid-column: 1 / -1; grid-row: 1; }
-  .keypad { grid-column: 1 / -1; grid-row: 3; }
   .score-controls { grid-column: 1 / 3; grid-row: 2; display: flex; gap: 3px; align-items: center; justify-content: flex-start; }
   .score-screen { margin-top: 0; min-width: 54px; min-height: 44px; }
   .calculator-label { max-width: 2.2em; line-height: 1.12; }
@@ -436,9 +424,6 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
 .phone-layout .recognition-heading { font-size: .66rem; }
 .phone-layout #recognition-status { margin-block: 2px; font-size: .66rem; }
 .phone-layout .recognition-actions button { min-height: 25px; padding: 1px 4px; font-size: .64rem; }
-.phone-layout .keypad { grid-column: 1 / -1; grid-row: 3; }
-.phone-layout .keypad button { height: 27px; font-size: .9rem; }
-.phone-layout .keypad button[data-edit] { font-size: .72rem; }
 .phone-layout .score-controls { grid-column: 1; grid-row: 2; display: flex; align-items: center; justify-content: flex-start; gap: 4px; }
 .phone-layout #score-source { margin: 0; font-size: .58rem; }
 .phone-layout .calculator-label { max-width: none; font-size: .65rem; line-height: 1.12; }

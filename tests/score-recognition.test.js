@@ -9,7 +9,7 @@ const {
   segmentDigits,
   normalizeDigit28,
   softmax,
-  decodeAllowedScore,
+  decodeLeadingDigitScore,
   isAllowedScore,
   isRecognitionCurrent,
 } = require("../score-roi.js");
@@ -111,17 +111,19 @@ test("stable softmax handles very large logits", () => {
   assert.equal(probabilities.indexOf(Math.max(...probabilities)), 1);
 });
 
-test("decoder accepts only legal score strings and refuses low confidence", () => {
+test("decoder classifies only the leading digit and uses segment count for trailing zeros", () => {
   for (const text of ["0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]) {
-    const result = decodeAllowedScore([...text].map(character => prediction(Number(character))));
+    const result = decodeLeadingDigitScore(prediction(Number(text[0])), text.length);
     assert.equal(result.status, "ok", text);
     assert.equal(result.score, Number(text), text);
+    assert.equal(result.digits.length, 1, text);
   }
-  for (const text of ["01", "85", "110"]) {
-    assert.equal(decodeAllowedScore([...text].map(character => prediction(Number(character)))).status, "invalid", text);
-  }
-  assert.equal(decodeAllowedScore([prediction(8, .45), prediction(0)]).status, "low_confidence");
-  assert.equal(decodeAllowedScore([]).status, "invalid");
+  assert.equal(decodeLeadingDigitScore(prediction(6), 1).status, "invalid");
+  assert.equal(decodeLeadingDigitScore(prediction(0), 2).status, "invalid");
+  assert.equal(decodeLeadingDigitScore(prediction(2), 3).status, "invalid");
+  assert.equal(decodeLeadingDigitScore(prediction(8), 4).status, "invalid");
+  assert.equal(decodeLeadingDigitScore(prediction(8, .45), 2).status, "low_confidence");
+  assert.equal(decodeLeadingDigitScore([], 2).status, "invalid");
   assert.equal(isAllowedScore(NaN), false);
   assert.equal(isAllowedScore(85), false);
   assert.equal(isAllowedScore(100), true);

@@ -30,14 +30,14 @@
     const segmented = root.ScoreRoi.segmentDigits(extracted.mask);
     if (segmented.status !== "ok") return { status: segmented.status, score: null, rawText: "", confidence: 0 };
 
-    const probabilities = [];
-    for (const box of segmented.digits) {
-      const values = root.ScoreRoi.normalizeDigit28(segmented.mask, box);
-      const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
-      const output = await session.run({ [session.inputNames[0]]: tensor });
-      probabilities.push(root.ScoreRoi.softmax(output[session.outputNames[0]].data));
-    }
-    return { ...root.ScoreRoi.decodeAllowedScore(probabilities), bounds: extracted.bounds };
+    const values = root.ScoreRoi.normalizeDigit28(segmented.mask, segmented.digits[0]);
+    const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
+    const output = await session.run({ [session.inputNames[0]]: tensor });
+    const probabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
+    return {
+      ...root.ScoreRoi.decodeLeadingDigitScore(probabilities, segmented.digits.length),
+      bounds: extracted.bounds,
+    };
   }
 
   root.scoreRecognizer = { init, recognize, MODEL_URL, ORT_VERSION };

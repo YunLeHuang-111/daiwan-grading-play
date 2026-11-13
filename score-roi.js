@@ -240,21 +240,30 @@
     return exponentials.map(value => value / total);
   }
 
-  function decodeAllowedScore(digits, options = {}) {
+  function decodeLeadingDigitScore(probabilities, digitCount, options = {}) {
     const confidenceThreshold = options.confidenceThreshold ?? .72;
     const marginThreshold = options.marginThreshold ?? .16;
-    if (!digits.length || digits.length > 3) return { status: "invalid", score: null, rawText: "", confidence: 0 };
-    const details = digits.map(probabilities => {
-      const ranked = probabilities.map((probability, value) => ({ value, probability })).sort((a, b) => b.probability - a.probability);
-      return { value: ranked[0].value, confidence: ranked[0].probability, margin: ranked[0].probability - ranked[1].probability, probabilities: Array.from(probabilities) };
-    });
-    const rawText = details.map(digit => digit.value).join("");
-    const confidence = Math.pow(details.reduce((product, digit) => product * digit.confidence, 1), 1 / details.length);
-    if (!allowedScoreTexts.has(rawText)) return { status: "invalid", score: null, rawText, confidence, digits: details };
-    if (details.some(digit => digit.confidence < confidenceThreshold || digit.margin < marginThreshold)) {
-      return { status: "low_confidence", score: null, rawText, confidence, digits: details };
+    if (!probabilities?.length || digitCount < 1 || digitCount > 3) {
+      return { status: "invalid", score: null, rawText: "", confidence: 0, digitCount };
     }
-    return { status: "ok", score: Number(rawText), rawText, confidence, digits: details };
+    const ranked = Array.from(probabilities, (probability, value) => ({ value, probability }))
+      .sort((a, b) => b.probability - a.probability);
+    const leadingDigit = ranked[0].value;
+    const confidence = ranked[0].probability;
+    const margin = confidence - ranked[1].probability;
+    const rawText = `${leadingDigit}${"0".repeat(digitCount - 1)}`;
+    let score = null;
+    if (digitCount === 1 && leadingDigit === 0) score = 0;
+    if (digitCount === 2 && leadingDigit >= 1) score = leadingDigit * 10;
+    if (digitCount === 3 && leadingDigit === 1) score = 100;
+    const digit = { value: leadingDigit, confidence, margin, probabilities: Array.from(probabilities) };
+    if (score === null || !allowedScoreTexts.has(rawText)) {
+      return { status: "invalid", score: null, rawText, confidence, digitCount, leadingDigit, digits: [digit] };
+    }
+    if (confidence < confidenceThreshold || margin < marginThreshold) {
+      return { status: "low_confidence", score: null, rawText, confidence, digitCount, leadingDigit, digits: [digit] };
+    }
+    return { status: "ok", score, rawText, confidence, digitCount, leadingDigit, digits: [digit] };
   }
 
   function isAllowedScore(value) {
@@ -277,7 +286,7 @@
     segmentDigits,
     normalizeDigit28,
     softmax,
-    decodeAllowedScore,
+    decodeLeadingDigitScore,
     isAllowedScore,
     isRecognitionCurrent,
   };
