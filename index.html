@@ -16,7 +16,7 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="木桌上的直式考卷和紅筆，旁邊寫著呆丸國中・段考閱卷室與老師，我幾分！">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="./style.css?v=score-cnn-3">
+  <link rel="stylesheet" href="./style.css?v=score-cnn-4">
   <script src="./score-roi.js?v=score-cnn-3" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js" defer></script>
   <script src="./score-recognizer.js?v=score-cnn-3" defer></script>
@@ -116,10 +116,7 @@
         <div class="paper student">
           <form id="grade-form" novalidate>
             <div id="student-heading"></div>
-            <div id="score-write-zone" class="score-write-zone" aria-label="手寫總分區域">
-              <span>請寫總分（紅筆）</span>
-              <strong aria-hidden="true">0–100・10的倍數</strong>
-            </div>
+            <div id="score-write-zone" class="score-write-zone" aria-label="右上角手寫總分辨識區"></div>
           </form>
           <div class="question-columns" id="student-answers"></div>
           <canvas id="ink" aria-label="可用滑鼠、觸控或手寫筆在學生的作答上畫紅筆註記" hidden></canvas>
@@ -157,7 +154,7 @@
     <ol class="tutorial-steps">
       <li><strong>對答案</strong><span>按題號比對標準答案的紅字與學生作答的藍字。多科和練習模式交卷後會換科。</span></li>
       <li><strong>畫紅筆</strong><span>在學生的作答上畫記，畫錯了可以用橡皮擦。</span></li>
-      <li><strong>給分交卷</strong><span>每題 10 分。右上角寫完整總分 0、10、20…100；完成批改後按「下一張」，系統只辨識有效數字並依尾端零的數量換算、交卷。</span></li>
+      <li><strong>給分交卷</strong><span>每題 10 分。在學生卷右上角空白處寫完整總分 0、10、20…100；完成批改後按「下一張」，系統只辨識該固定區域。</span></li>
     </ol>
     <p class="tutorial-modes">單科 1 分鐘，多科 2 分鐘且每張換科，練習不限時且每張換科。若畫面放大，用兩指向內捏合即可縮回。</p>
     <form method="dialog" class="tutorial-actions">

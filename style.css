@@ -110,13 +110,10 @@ progress::-moz-progress-bar { background: #683b38; }
 #ink.viewport-zoomed { touch-action: pinch-zoom; }
 #ink.eraser-active { cursor: cell; }
 .score-write-zone {
-  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 5px;
-  width: clamp(116px, 35%, 158px); min-height: 64px; margin: 7px 0 1px auto; padding: 6px 8px;
-  border: 2px dashed #bd5c55; border-radius: 7px; background: #fff7f4; color: #8d312c;
-  font-family: system-ui, sans-serif; pointer-events: none;
+  position: absolute; z-index: 1; inset: 0 0 auto auto;
+  width: 32%; height: 20%; margin: 0; padding: 0;
+  border: 0; background: transparent; opacity: 0; pointer-events: none;
 }
-.score-write-zone span { max-width: 6em; font-size: .68rem; font-weight: 850; line-height: 1.2; }
-.score-write-zone strong { color: #bc8d89; font: 800 .72rem/1 ui-monospace, monospace; }
 .start-panel { position: absolute; z-index: 1; inset: clamp(69px, 20cqw, 102px) 0 27px; display: grid; justify-items: center; align-content: start; background: #ffffffeb; text-align: center; font-family: system-ui, sans-serif; padding: clamp(20px, 8cqw, 44px) 10px 10px; }
 .start-panel h3 { margin: 0; font-size: 1.27rem; }
 .start-panel p { margin: 7px 0 14px; color: #504238; font-size: .9rem; }
@@ -405,8 +402,6 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
 .compact-student-paper .exam-heading thead th { padding-block: 3px; font-size: .84rem; }
 .compact-student-paper .exam-heading tbody th { padding: 0; font-size: .6rem; }
 .compact-student-paper .exam-heading tbody td { height: 24px; font-size: .68rem; }
-.compact-student-paper .score-write-zone { width: 118px; min-height: 52px; margin-top: 4px; padding: 4px 6px; }
-.compact-student-paper .score-write-zone span { font-size: .6rem; }
 .compact-student-paper .sheet-group h3 { min-height: 0; }
 .compact-student-paper .sheet-group li { min-height: 0; padding-block: 2px; }
 .compact-student-paper .paper-page { margin-top: 6px; }
