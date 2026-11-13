@@ -109,7 +109,7 @@ const browserGame = (() => {
       return { remainingMs };
     }
     if (action !== "submit" || method !== "POST") throw new Error("找不到此操作。");
-    if (!/^[1-9][0-9]*,(?:100|[0-9]{1,2})$/.test(body)) throw new Error("請填入 0 到 100 的整數。");
+    if (!/^[1-9][0-9]*,(?:100|[1-9]0|0)$/.test(body)) throw new Error("請填入 0 到 100、10 的倍數分數。");
     if (round.finished || remainingMs === 0) return { finished: true, result: results() };
     const [number, entered] = body.split(",").map(Number);
     if (number !== round.paper.number) throw new Error("這張考卷已交件，請重新開始。");

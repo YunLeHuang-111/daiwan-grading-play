@@ -8,8 +8,19 @@ for (const id of ["key-heading", "student-heading"]) {
 }
 const field = (heading, name) => get(heading).querySelector(`[data-field="${name}"]`);
 let selectedScore = null;
+let selectedScoreSource = null;
 const keypad = get("keypad");
 const scoreButtons = keypad.querySelectorAll("[data-score]");
+const scoreZone = get("score-write-zone");
+const recognizeScore = get("recognize-score");
+const confirmScore = get("confirm-score");
+const rewriteScore = get("rewrite-score");
+const toggleKeypad = get("toggle-keypad");
+let scoreCandidate = null;
+let scoreInkRevision = 0;
+let recognitionRequest = 0;
+let recognitionPending = false;
+let modelAvailable = false;
 const modeButtons = document.querySelectorAll(".mode-buttons button");
 const layoutButtons = document.querySelectorAll(".layout-buttons button");
 let phoneLayout;
@@ -57,6 +68,38 @@ function message(text = "") {
   const status = get("message");
   status.textContent = text;
   status.hidden = !text;
+}
+
+function setRecognitionStatus(text) {
+  get("recognition-status").textContent = text;
+}
+
+function setKeypadExpanded(expanded) {
+  keypad.hidden = !expanded;
+  toggleKeypad.setAttribute("aria-expanded", String(expanded));
+  toggleKeypad.textContent = expanded ? "收合按鈕輸入" : "改用按鈕輸入";
+}
+
+function resetScoreRecognition(text = "請在考卷右上角書寫總分。") {
+  recognitionRequest++;
+  recognitionPending = false;
+  scoreCandidate = null;
+  scoreInkRevision++;
+  confirmScore.hidden = true;
+  confirmScore.textContent = "確認使用";
+  setGrade(null);
+  setRecognitionStatus(text);
+  setKeypadExpanded(false);
+}
+
+function invalidateScoreRecognition(text = "筆跡已更新，請重新辨識分數。") {
+  recognitionRequest++;
+  recognitionPending = false;
+  scoreCandidate = null;
+  scoreInkRevision++;
+  confirmScore.hidden = true;
+  if (selectedScoreSource === "cnn") setGrade(null);
+  if (phase === "playing") setRecognitionStatus(text);
 }
 
 const api = browserGame;
@@ -159,19 +202,23 @@ function setLayout(usePhoneLayout) {
   }
 }
 
-function setGrade(value) {
+function setGrade(value, source = null) {
+  if (value !== null && !ScoreRoi.isAllowedScore(value)) value = null;
   selectedScore = value;
+  selectedScoreSource = value === null ? null : source;
   get("score-preview").textContent = value ?? "—";
+  get("score-source").textContent = value === null ? "尚未確認" : source === "cnn" ? "CNN 辨識・已確認" : "手動分數";
   for (const button of scoreButtons) {
     button.setAttribute("aria-pressed", String(value === Number(button.dataset.score)));
   }
+  if (phase) updateControls();
 }
 
 function renderPaper(nextPaper) {
   paper = nextPaper;
   renderStudent();
-  setGrade(null);
-  clearInk();
+  clearInk({ silent: true });
+  resetScoreRecognition();
   fitPhonePaper();
   resizeInk();
 }
@@ -184,8 +231,12 @@ function updateControls() {
   for (const button of [...modeButtons, ...layoutButtons]) button.disabled = !canChoose;
   get("restart").disabled = start.disabled = !canChoose;
   get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
-  submit.disabled = !editable;
+  submit.disabled = !editable || selectedScore === null;
   keypad.disabled = !editable;
+  recognizeScore.disabled = !editable || recognitionPending || !modelAvailable;
+  confirmScore.disabled = !editable || !scoreCandidate || recognitionPending;
+  rewriteScore.disabled = !editable;
+  toggleKeypad.disabled = !editable;
   practiceFinish.disabled = !editable;
   get("undo").disabled = !editable || strokes.length === 0;
   get("clear").disabled = !editable || strokes.length === 0;
@@ -262,11 +313,12 @@ get("grade-form").addEventListener("submit", async event => {
     return;
   }
   const score = selectedScore;
-  if (score === null) {
-    message("請先選擇這張考卷的送出分數。");
+  if (score === null || !selectedScoreSource || !ScoreRoi.isAllowedScore(score)) {
+    message("請先辨識並確認分數，或使用按鈕輸入有效分數。");
     return;
   }
 
+  recognitionRequest++;
   phase = "submitting";
   updateControls();
   message();
@@ -299,6 +351,8 @@ get("grade-form").addEventListener("submit", async event => {
 });
 
 async function finish() {
+  recognitionRequest++;
+  recognitionPending = false;
   phase = "finishing";
   updateControls();
   try {
@@ -419,6 +473,10 @@ function renderRoute() {
 
 function showResults(data) {
   clearInterval(timer);
+  recognitionRequest++;
+  recognitionPending = false;
+  scoreCandidate = null;
+  confirmScore.hidden = true;
   phase = "finished";
   updateControls();
   if (!round.practice) updateClock(0);
@@ -509,12 +567,47 @@ function point(event, box = ink.getBoundingClientRect()) {
   return [(event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height];
 }
 
-function clearInk() {
+function clearInk(options = {}) {
+  const silent = options?.silent === true;
   strokes = [];
   activeStroke = undefined;
   activePointer = undefined;
   stylusTouchId = null;
   redrawInk();
+  if (!silent) invalidateScoreRecognition("所有筆跡已清除，請重新書寫分數。");
+  updateControls();
+}
+
+function scoreZoneInInkCoordinates() {
+  const inkRect = ink.getBoundingClientRect();
+  const zoneRect = scoreZone.getBoundingClientRect();
+  return {
+    left: (zoneRect.left - inkRect.left) / inkRect.width,
+    right: (zoneRect.right - inkRect.left) / inkRect.width,
+    top: (zoneRect.top - inkRect.top) / inkRect.height,
+    bottom: (zoneRect.bottom - inkRect.top) / inkRect.height,
+  };
+}
+
+function clearScoreInk() {
+  const zone = scoreZoneInInkCoordinates();
+  const nextStrokes = [];
+  for (const stroke of strokes) {
+    let current = [];
+    for (const point of stroke.points) {
+      const inside = point[0] >= zone.left && point[0] <= zone.right && point[1] >= zone.top && point[1] <= zone.bottom;
+      if (inside) {
+        if (current.length) nextStrokes.push({ ...stroke, points: current });
+        current = [];
+      } else {
+        current.push(point);
+      }
+    }
+    if (current.length) nextStrokes.push({ ...stroke, points: current });
+  }
+  strokes = nextStrokes;
+  redrawInk();
+  resetScoreRecognition("分數區已清除，其他批改筆跡已保留。");
   updateControls();
 }
 
@@ -622,6 +715,7 @@ function beginStroke(event, capture = true) {
   activePointer = event.pointerId;
   activeStroke = { points: [point(event)], tool, pointerType: event.pointerType };
   strokes.push(activeStroke);
+  invalidateScoreRecognition();
   if (capture) {
     try {
       ink.setPointerCapture(event.pointerId);
@@ -737,6 +831,7 @@ get("undo").addEventListener("click", () => {
   stylusTouchId = null;
   strokes.pop();
   redrawInk();
+  invalidateScoreRecognition("已復原筆跡，請重新辨識分數。");
   updateControls();
 });
 get("clear").addEventListener("click", clearInk);
@@ -797,8 +892,85 @@ setLayout(matchMedia("(max-width: 680px), (max-height: 500px) and (pointer: coar
 keypad.addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button || phase !== "playing") return;
-  setGrade(button.dataset.score === undefined ? null : Number(button.dataset.score));
+  recognitionRequest++;
+  recognitionPending = false;
+  scoreCandidate = null;
+  confirmScore.hidden = true;
+  const value = button.dataset.score === undefined ? null : Number(button.dataset.score);
+  setGrade(value, value === null ? null : "manual");
+  setRecognitionStatus(value === null ? "手動分數已清除。" : `已使用按鈕選擇 ${value} 分。`);
   message();
 });
+
+toggleKeypad.addEventListener("click", () => setKeypadExpanded(keypad.hidden));
+rewriteScore.addEventListener("click", clearScoreInk);
+
+recognizeScore.addEventListener("click", async () => {
+  if (phase !== "playing" || recognitionPending || !modelAvailable) return;
+  const request = ++recognitionRequest;
+  const revision = scoreInkRevision;
+  const paperNumber = paper.number;
+  const recognitionSnapshot = { request, revision, paperNumber };
+  recognitionPending = true;
+  scoreCandidate = null;
+  confirmScore.hidden = true;
+  setRecognitionStatus("辨識中…");
+  updateControls();
+  let result;
+  try {
+    result = await scoreRecognizer.recognize({ inkCanvas: ink, scoreZone });
+  } catch {
+    result = { status: "model_unavailable", score: null };
+  }
+  if (!ScoreRoi.isRecognitionCurrent(recognitionSnapshot, {
+    request: recognitionRequest,
+    revision: scoreInkRevision,
+    paperNumber: paper.number,
+    phase,
+  })) return;
+  recognitionPending = false;
+  if (result.status === "ok") {
+    scoreCandidate = result;
+    const percent = Math.round(result.confidence * 100);
+    setRecognitionStatus(`辨識到 ${result.score} 分（信心 ${percent}%），請確認後再交卷。`);
+    confirmScore.textContent = `確認使用 ${result.score} 分`;
+    confirmScore.hidden = false;
+  } else {
+    const detail = result.status === "empty" ? "分數區沒有足夠筆跡。" :
+      result.status === "invalid" && result.rawText ? `辨識到不合法的「${result.rawText}」。` :
+      result.status === "model_unavailable" ? "CNN 模型目前無法使用。" : "筆跡或數字切割信心不足。";
+    setRecognitionStatus(`${detail}請重寫或使用按鈕輸入。`);
+    setKeypadExpanded(true);
+  }
+  updateControls();
+});
+
+confirmScore.addEventListener("click", () => {
+  if (phase !== "playing" || !scoreCandidate || scoreCandidate.status !== "ok") return;
+  const value = scoreCandidate.score;
+  scoreCandidate = null;
+  confirmScore.hidden = true;
+  setGrade(value, "cnn");
+  setRecognitionStatus(`已確認使用 ${value} 分；可按「下一張」交卷。`);
+  message();
+});
+
+async function preloadScoreModel() {
+  const status = get("model-status");
+  try {
+    await scoreRecognizer.init();
+    modelAvailable = true;
+    status.textContent = "CNN 可用";
+    status.className = "model-status ready";
+  } catch {
+    modelAvailable = false;
+    status.textContent = "CNN 不可用・可手動輸入";
+    status.className = "model-status unavailable";
+    setKeypadExpanded(true);
+  }
+  updateControls();
+}
+
+preloadScoreModel();
 
 tutorial.showModal();
