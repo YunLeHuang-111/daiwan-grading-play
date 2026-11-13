@@ -8,6 +8,7 @@ const {
   extractScoreInk,
   segmentDigits,
   normalizeDigit28,
+  normalizeDigitVariants,
   softmax,
   decodeLeadingDigitScore,
   isAllowedScore,
@@ -80,6 +81,22 @@ test("segmentation preserves 0 and splits every legal multi-digit score", () => 
   }
 });
 
+test("segmentation recursively separates a touching 100", () => {
+  const mask = scoreMask("100");
+  const middleY = 18;
+  for (let x = 9; x <= 24; x++) {
+    const index = middleY * mask.width + x;
+    if (!mask.data[index]) { mask.data[index] = 1; mask.foregroundPixels++; }
+  }
+  for (let x = 35; x <= 46; x++) {
+    const index = middleY * mask.width + x;
+    if (!mask.data[index]) { mask.data[index] = 1; mask.foregroundPixels++; }
+  }
+  const result = segmentDigits(mask);
+  assert.equal(result.status, "ok");
+  assert.equal(result.digits.length, 3);
+});
+
 test("segmentation rejects empty ink and isolated noise", () => {
   assert.equal(segmentDigits({ data: new Uint8Array(100), width: 10, height: 10, foregroundPixels: 0 }).status, "empty");
   const rgba = new Uint8ClampedArray(10 * 10 * 4);
@@ -96,6 +113,16 @@ test("normalization creates centered 28x28 float input", () => {
   assert.equal(normalized.length, 784);
   assert.ok(normalized.some(value => value === 1));
   for (let x = 0; x < 28; x++) assert.equal(normalized[x], 0);
+});
+
+test("normalization provides translation and stroke-width TTA variants", () => {
+  const mask = scoreMask("6");
+  const box = segmentDigits(mask).digits[0];
+  const variants = normalizeDigitVariants(mask, box);
+  assert.equal(variants.length, 6);
+  assert.ok(variants.every(values => values instanceof Float32Array && values.length === 784));
+  assert.notDeepEqual(Array.from(variants[0]), Array.from(variants[1]));
+  assert.ok(variants[5].reduce((sum, value) => sum + value, 0) > variants[0].reduce((sum, value) => sum + value, 0));
 });
 
 function prediction(value, confidence = .9) {

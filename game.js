@@ -37,6 +37,7 @@ const practiceFinish = get("finish-practice");
 const practiceCheck = get("check-practice-score");
 const reviewedPapers = new Map();
 const submittedPapers = new Map();
+let pendingRecognitions = [];
 const reviewResize = new ResizeObserver(entries => {
   for (const { target } of entries) fitReviewPaper(target);
 });
@@ -68,12 +69,14 @@ function setRecognitionStatus(text) {
   get("recognition-status").textContent = text;
 }
 
-function resetScoreRecognition(text = "完成批改後按「下一張」，系統會自動辨識。") {
+function resetScoreRecognition(text) {
   recognitionRequest++;
   recognitionPending = false;
   scoreInkRevision++;
   setGrade(null);
-  setRecognitionStatus(text);
+  setRecognitionStatus(text || (round?.practice ?
+    "完成批改後按「下一張」，系統會立即辨識。" :
+    "完成批改後按「下一張」收卷；時間結束後統一辨識。"));
 }
 
 function invalidateScoreRecognition(text = "筆跡已更新，請重新辨識分數。") {
@@ -209,7 +212,7 @@ function updateControls() {
   for (const button of [...modeButtons, ...layoutButtons]) button.disabled = !canChoose;
   get("restart").disabled = start.disabled = !canChoose;
   get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
-  submit.disabled = !editable || recognitionPending || !modelAvailable;
+  submit.disabled = !editable || recognitionPending || (round?.practice && !modelAvailable);
   rewriteScore.disabled = !editable;
   practiceFinish.disabled = !editable;
   practiceCheck.disabled = !editable || recognitionPending || !modelAvailable || !round?.practice;
@@ -256,6 +259,7 @@ async function startRound(mode) {
     get("time-bar").max = round.mode === "multi" ? 120000 : 60000;
     get("clock-card").classList.remove("urgent");
     submittedPapers.clear();
+    pendingRecognitions = [];
     deadline = round.practice ? null : performance.now() + round.remainingMs;
     get("start-panel").hidden = true;
     ink.hidden = false;
@@ -325,11 +329,17 @@ get("grade-form").addEventListener("submit", async event => {
     finish();
     return;
   }
-  const score = await recognizeCurrentScore();
-  if (score === null) return;
-  if (deadline !== null && performance.now() >= deadline) {
-    finish();
-    return;
+  let score = null;
+  let captured = null;
+  if (round.practice) {
+    score = await recognizeCurrentScore();
+    if (score === null) return;
+    if (deadline !== null && performance.now() >= deadline) {
+      finish();
+      return;
+    }
+  } else {
+    captured = scoreRecognizer.capture({ inkCanvas: ink, scoreZone });
   }
 
   recognitionRequest++;
@@ -337,12 +347,16 @@ get("grade-form").addEventListener("submit", async event => {
   updateControls();
   message();
   try {
-    rememberPaper(score);
-    const data = await api(`${round.id}/submit`, "POST", `${paper.number},${score}`);
+    const paperNumber = paper.number;
+    rememberPaper();
+    const data = round.practice ?
+      await api(`${round.id}/submit`, "POST", `${paperNumber},${score}`) :
+      await api(`${round.id}/defer`, "POST", String(paperNumber));
     if (data.finished) {
-      showResults(data.result);
+      finish();
       return;
     }
+    if (!round.practice) pendingRecognitions.push({ number: paperNumber, captured });
     if (!round.practice) deadline = performance.now() + data.remainingMs;
     get("count").textContent = String(data.count).padStart(2, "0");
     if (data.subject !== round.subject) {
@@ -352,6 +366,7 @@ get("grade-form").addEventListener("submit", async event => {
       renderKey();
     }
     renderPaper(data.paper);
+    if (!round.practice) setRecognitionStatus(`已收第 ${paperNumber} 張；時間結束後統一辨識。`);
     const sheet = get("student-sheet");
     if (sheet.getBoundingClientRect().top < 0) {
       sheet.scrollIntoView({ block: "start" });
@@ -366,11 +381,25 @@ get("grade-form").addEventListener("submit", async event => {
 
 async function finish() {
   recognitionRequest++;
-  recognitionPending = false;
+  recognitionPending = !round.practice;
   phase = "finishing";
   updateControls();
   try {
-    const data = round.practice ? await api(`${round.id}/finish`, "POST") : await api(`${round.id}/results`);
+    let data;
+    if (round.practice) {
+      data = await api(`${round.id}/finish`, "POST");
+    } else {
+      clearInterval(timer);
+      const recognized = [];
+      for (let index = 0; index < pendingRecognitions.length; index++) {
+        const pending = pendingRecognitions[index];
+        setRecognitionStatus(`正在統一辨識第 ${index + 1}／${pendingRecognitions.length} 張…`);
+        const result = await scoreRecognizer.recognizeCapture(pending.captured);
+        recognized.push({ number: pending.number, score: result.status === "ok" ? result.score : null });
+      }
+      data = await api(`${round.id}/recognize`, "POST", JSON.stringify(recognized));
+      recognitionPending = false;
+    }
     if (data.remainingMs !== undefined) {
       deadline = performance.now() + data.remainingMs;
       phase = "playing";
@@ -387,8 +416,8 @@ async function finish() {
   }
 }
 
-function rememberPaper(score) {
-  const key = `${paper.number}:${score}`;
+function rememberPaper() {
+  const key = String(paper.number);
   if (submittedPapers.has(key)) return;
   const source = get("student-sheet");
   const original = source.querySelector(".paper");
@@ -444,10 +473,10 @@ function renderReviewedPapers(grades) {
     const scores = document.createElement("span");
     const verdict = document.createElement("span");
     label.textContent = `第 ${number} 張`;
-    scores.textContent = `你給 ${entered} 分 · 應得 ${expected} 分`;
+    scores.textContent = entered === null ? `分數無法辨識 · 應得 ${expected} 分` : `你給 ${entered} 分 · 應得 ${expected} 分`;
     verdict.className = entered === expected ? "review-verdict correct" : "review-verdict";
-    verdict.textContent = entered === expected ? "給分正確" : "給分有誤";
-    const snapshot = submittedPapers.get(`${number}:${entered}`);
+    verdict.textContent = entered === null ? "辨識失敗" : entered === expected ? "給分正確" : "給分有誤";
+    const snapshot = submittedPapers.get(String(number));
     if (snapshot) {
       label.textContent += ` · ${snapshot.subject}`;
       const preview = reviewFrame(snapshot);
@@ -913,7 +942,7 @@ async function preloadScoreModel() {
     status.className = "model-status ready";
   } catch {
     modelAvailable = false;
-    status.textContent = "CNN 不可用・目前無法交卷";
+    status.textContent = "CNN 不可用・辨識可能失敗";
     status.className = "model-status unavailable";
     setRecognitionStatus("模型載入失敗，請重新整理頁面後再試。");
   }

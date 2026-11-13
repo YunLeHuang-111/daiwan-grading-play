@@ -163,31 +163,32 @@
     return bottom < top ? null : { left, top, right, bottom, width: right - left + 1, height: bottom - top + 1, pixels };
   }
 
-  function splitWideRun(mask, run, overallHeight) {
+  function splitWideRun(mask, run, overallHeight, depth = 0) {
     const width = run.right - run.left + 1;
-    if (width < overallHeight * 1.05) return [run];
+    if (depth >= 2 || width < overallHeight * .82) return [run];
     const columnCounts = [];
     for (let x = run.left; x <= run.right; x++) {
       let count = 0;
       for (let y = 0; y < mask.height; y++) count += mask.data[y * mask.width + x];
       columnCounts.push(count);
     }
-    const edge = Math.max(2, Math.floor(width * .2));
+    const edge = Math.max(2, Math.floor(width * .16));
     let best = -1;
     let bestCount = Infinity;
     for (let index = edge; index < width - edge; index++) {
       const count = columnCounts[index];
-      if (count < bestCount) {
+      if (count < bestCount || (count === bestCount && Math.abs(index - width / 2) < Math.abs(best - width / 2))) {
         best = index;
         bestCount = count;
       }
     }
     const peak = Math.max(...columnCounts, 1);
-    if (best < 0 || bestCount > peak * .3) return [run];
-    return [
+    if (best < 0 || bestCount > peak * .45) return [run];
+    const parts = [
       { left: run.left, right: run.left + best - 1 },
       { left: run.left + best + 1, right: run.right },
     ].filter(part => part.right >= part.left);
+    return parts.flatMap(part => splitWideRun(mask, part, overallHeight, depth + 1));
   }
 
   function segmentDigits(mask, options = {}) {
@@ -217,20 +218,80 @@
   }
 
   function normalizeDigit28(mask, box) {
-    const output = new Float32Array(28 * 28);
     const scale = Math.min(20 / box.width, 20 / box.height);
     const targetWidth = Math.max(1, Math.round(box.width * scale));
     const targetHeight = Math.max(1, Math.round(box.height * scale));
-    const left = Math.floor((28 - targetWidth) / 2);
-    const top = Math.floor((28 - targetHeight) / 2);
+    const resized = new Float32Array(targetWidth * targetHeight);
     for (let ty = 0; ty < targetHeight; ty++) {
-      const sy = box.top + Math.min(box.height - 1, Math.floor((ty + .5) * box.height / targetHeight));
       for (let tx = 0; tx < targetWidth; tx++) {
-        const sx = box.left + Math.min(box.width - 1, Math.floor((tx + .5) * box.width / targetWidth));
-        output[(top + ty) * 28 + left + tx] = mask.data[sy * mask.width + sx] ? 1 : 0;
+        const sourceLeft = box.left + Math.floor(tx * box.width / targetWidth);
+        const sourceRight = box.left + Math.ceil((tx + 1) * box.width / targetWidth);
+        const sourceTop = box.top + Math.floor(ty * box.height / targetHeight);
+        const sourceBottom = box.top + Math.ceil((ty + 1) * box.height / targetHeight);
+        let maximum = 0;
+        for (let sy = sourceTop; sy < sourceBottom && !maximum; sy++) {
+          for (let sx = sourceLeft; sx < sourceRight; sx++) {
+            if (mask.data[sy * mask.width + sx]) { maximum = 1; break; }
+          }
+        }
+        resized[ty * targetWidth + tx] = maximum;
+      }
+    }
+    let mass = 0;
+    let massX = 0;
+    let massY = 0;
+    resized.forEach((value, index) => {
+      if (!value) return;
+      mass += value;
+      massX += (index % targetWidth) * value;
+      massY += Math.floor(index / targetWidth) * value;
+    });
+    const left = Math.round(13.5 - (mass ? massX / mass : (targetWidth - 1) / 2));
+    const top = Math.round(13.5 - (mass ? massY / mass : (targetHeight - 1) / 2));
+    const output = new Float32Array(28 * 28);
+    for (let y = 0; y < targetHeight; y++) {
+      for (let x = 0; x < targetWidth; x++) {
+        const ox = left + x;
+        const oy = top + y;
+        if (ox >= 0 && ox < 28 && oy >= 0 && oy < 28) output[oy * 28 + ox] = resized[y * targetWidth + x];
       }
     }
     return output;
+  }
+
+  function transformDigit28(values, { dx = 0, dy = 0, dilate = false } = {}) {
+    const output = new Float32Array(28 * 28);
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        let value = 0;
+        const sourceX = x - dx;
+        const sourceY = y - dy;
+        const radius = dilate ? 1 : 0;
+        for (let oy = -radius; oy <= radius && !value; oy++) {
+          for (let ox = -radius; ox <= radius; ox++) {
+            const sx = sourceX + ox;
+            const sy = sourceY + oy;
+            if (sx >= 0 && sx < 28 && sy >= 0 && sy < 28 && values[sy * 28 + sx] > value) {
+              value = values[sy * 28 + sx];
+            }
+          }
+        }
+        output[y * 28 + x] = value;
+      }
+    }
+    return output;
+  }
+
+  function normalizeDigitVariants(mask, box) {
+    const base = normalizeDigit28(mask, box);
+    return [
+      base,
+      transformDigit28(base, { dx: -1 }),
+      transformDigit28(base, { dx: 1 }),
+      transformDigit28(base, { dy: -1 }),
+      transformDigit28(base, { dy: 1 }),
+      transformDigit28(base, { dilate: true }),
+    ];
   }
 
   function softmax(logits) {
@@ -285,6 +346,8 @@
     removeComponentNoise,
     segmentDigits,
     normalizeDigit28,
+    normalizeDigitVariants,
+    transformDigit28,
     softmax,
     decodeLeadingDigitScore,
     isAllowedScore,

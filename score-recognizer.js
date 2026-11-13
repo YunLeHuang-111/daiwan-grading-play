@@ -18,27 +18,42 @@
     return sessionPromise;
   }
 
-  async function recognize({ inkCanvas, scoreZone }) {
+  function capture({ inkCanvas, scoreZone }) {
+    const extracted = root.ScoreRoi.extractScoreInk({ inkCanvas, scoreZone });
+    return extracted.status === "ok" ? extracted : { status: "empty", bounds: extracted.bounds, mask: null };
+  }
+
+  async function recognizeCapture(captured) {
     let session;
     try {
       session = await init();
     } catch (error) {
       return { status: "model_unavailable", score: null, rawText: "", confidence: 0, error: error.message };
     }
-    const extracted = root.ScoreRoi.extractScoreInk({ inkCanvas, scoreZone });
-    if (extracted.status !== "ok") return { status: "empty", score: null, rawText: "", confidence: 0 };
-    const segmented = root.ScoreRoi.segmentDigits(extracted.mask);
+    if (captured.status !== "ok" || !captured.mask) return { status: "empty", score: null, rawText: "", confidence: 0 };
+    const segmented = root.ScoreRoi.segmentDigits(captured.mask);
     if (segmented.status !== "ok") return { status: segmented.status, score: null, rawText: "", confidence: 0 };
 
-    const values = root.ScoreRoi.normalizeDigit28(segmented.mask, segmented.digits[0]);
-    const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
-    const output = await session.run({ [session.inputNames[0]]: tensor });
-    const probabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
+    const variants = root.ScoreRoi.normalizeDigitVariants(segmented.mask, segmented.digits[0]);
+    const probabilities = new Float32Array(10);
+    for (const values of variants) {
+      const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
+      const output = await session.run({ [session.inputNames[0]]: tensor });
+      const variantProbabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
+      variantProbabilities.forEach((value, index) => { probabilities[index] += value / variants.length; });
+    }
     return {
-      ...root.ScoreRoi.decodeLeadingDigitScore(probabilities, segmented.digits.length),
-      bounds: extracted.bounds,
+      ...root.ScoreRoi.decodeLeadingDigitScore(probabilities, segmented.digits.length, {
+        confidenceThreshold: .65,
+        marginThreshold: .12,
+      }),
+      bounds: captured.bounds,
     };
   }
 
-  root.scoreRecognizer = { init, recognize, MODEL_URL, ORT_VERSION };
+  async function recognize(input) {
+    return recognizeCapture(capture(input));
+  }
+
+  root.scoreRecognizer = { init, capture, recognize, recognizeCapture, MODEL_URL, ORT_VERSION };
 })(globalThis);
