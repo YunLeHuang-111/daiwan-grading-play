@@ -144,16 +144,23 @@ const browserGame = (() => {
       if (!Array.isArray(recognized)) throw new Error("批次辨識資料格式錯誤。");
       const scores = new Map();
       for (const item of recognized) {
-        if (!item || !Number.isInteger(item.number) || (item.score !== null && !isAllowedScore(item.score)) || scores.has(item.number)) {
+        const validFailureReason = item?.failureReason == null ||
+          (typeof item.failureReason === "string" && item.failureReason.length > 0 && item.failureReason.length <= 300);
+        if (!item || !Number.isInteger(item.number) || (item.score !== null && !isAllowedScore(item.score)) ||
+          !validFailureReason || scores.has(item.number)) {
           throw new Error("批次辨識分數不合法。");
         }
-        scores.set(item.number, item.score);
+        scores.set(item.number, { score: item.score, failureReason: item.score === null ? item.failureReason || "未提供診斷" : null });
       }
       const pending = round.grades.filter(grade => grade.entered === null);
       if (scores.size !== pending.length || pending.some(grade => !scores.has(grade.number))) {
         throw new Error("批次辨識考卷數量不符。");
       }
-      for (const grade of pending) grade.entered = scores.get(grade.number);
+      for (const grade of pending) {
+        const recognizedPaper = scores.get(grade.number);
+        grade.entered = recognizedPaper.score;
+        grade.failureReason = recognizedPaper.failureReason;
+      }
       round.finished = true;
       return results();
     }

@@ -284,6 +284,32 @@ async function startRound(mode) {
   }
 }
 
+function recognitionFailureReason(result) {
+  const info = result?.diagnostic || {};
+  if (result?.status === "model_unavailable") return `CNN 模型載入失敗${info.error ? `（${info.error}）` : ""}`;
+  if (result?.status === "inference_error") return `ONNX 推論執行失敗${info.error ? `（${info.error}）` : ""}`;
+  if (result?.status === "processing_error") return `筆跡前處理執行失敗${info.error ? `（${info.error}）` : ""}`;
+  if (info.stage === "capture") return "右上角辨識區沒有讀到紅筆筆跡";
+  if (info.stage === "segmentation" && info.code === "no_valid_segments") {
+    return "讀到筆跡，但去除雜點後沒有足夠大的數字區段";
+  }
+  if (info.stage === "segmentation") {
+    return `數字切割不穩定（有效候選 ${info.segmentCount ?? 0} 段、忽略 ${info.ignoredPixels ?? 0} 個像素）`;
+  }
+  if (result?.status === "low_confidence" && info.stage === "decoding") {
+    const percent = Math.round((info.confidence || 0) * 100);
+    const votes = Array.isArray(info.votes) ? info.votes : [];
+    const receivedVotes = Number.isInteger(info.leadingDigit) ? votes[info.leadingDigit] || 0 : 0;
+    const totalVotes = votes.reduce((sum, vote) => sum + vote, 0);
+    const margin = Math.round((info.margin || 0) * 100);
+    return `十位數候選 ${info.leadingDigit ?? "—"} 信心不足（平均 ${percent}%、TTA ${receivedVotes}/${totalVotes || 6} 票、機率差 ${margin}%）`;
+  }
+  if (result?.status === "invalid") {
+    return info.rawText ? `辨識格式不合法（原始結果 ${info.rawText}、切割 ${info.segmentCount ?? 0} 段）` : "辨識出的分數格式不合法";
+  }
+  return `無法確認辨識結果（階段：${info.stage || "unknown"}，狀態：${result?.status || "unknown"}）`;
+}
+
 async function recognizeCurrentScore({ previewOnly = false } = {}) {
   if (phase !== "playing" || recognitionPending || !modelAvailable) return null;
   const request = ++recognitionRequest;
@@ -295,8 +321,8 @@ async function recognizeCurrentScore({ previewOnly = false } = {}) {
   let result;
   try {
     result = await scoreRecognizer.recognize({ inkCanvas: ink, scoreZone });
-  } catch {
-    result = { status: "model_unavailable", score: null };
+  } catch (error) {
+    result = { status: "inference_error", score: null, diagnostic: { stage: "inference", error: error.message } };
   }
   if (!ScoreRoi.isRecognitionCurrent(recognitionSnapshot, {
     request: recognitionRequest,
@@ -313,10 +339,9 @@ async function recognizeCurrentScore({ previewOnly = false } = {}) {
     updateControls();
     return result.score;
   }
-  const detail = result.status === "empty" ? "總分區沒有足夠筆跡。" :
-    result.status === "invalid" && result.rawText ? `辨識到不合法的分數格式「${result.rawText}」。` :
-    result.status === "model_unavailable" ? "CNN 模型目前無法使用。" : "筆跡或數字切割信心不足。";
-  setRecognitionStatus(`${detail}請在右上角重寫 0、10、20…100 後再試一次。`);
+  const detail = recognitionFailureReason(result);
+  console.warn("[score-recognition] 辨識失敗", { paperNumber: paper.number, status: result.status, diagnostic: result.diagnostic });
+  setRecognitionStatus(`失敗原因：${detail}。請在右上角重寫 0、10、20…100 後再試一次。`);
   message("分數辨識失敗，考卷尚未交件。");
   updateControls();
   return null;
@@ -395,7 +420,11 @@ async function finish() {
         const pending = pendingRecognitions[index];
         setRecognitionStatus(`正在統一辨識第 ${index + 1}／${pendingRecognitions.length} 張…`);
         const result = await scoreRecognizer.recognizeCapture(pending.captured);
-        recognized.push({ number: pending.number, score: result.status === "ok" ? result.score : null });
+        const failureReason = result.status === "ok" ? null : recognitionFailureReason(result).slice(0, 300);
+        if (failureReason) {
+          console.warn("[score-recognition] 批次辨識失敗", { paperNumber: pending.number, status: result.status, diagnostic: result.diagnostic });
+        }
+        recognized.push({ number: pending.number, score: result.status === "ok" ? result.score : null, failureReason });
       }
       data = await api(`${round.id}/recognize`, "POST", JSON.stringify(recognized));
       recognitionPending = false;
@@ -464,7 +493,7 @@ function renderReviewedPapers(grades) {
   list.replaceChildren();
   get("review-count").textContent = `${grades.length} 張`;
   get("review-note").textContent = grades.length ? "點選縮圖即可放大查看。" : "這一局還沒有交件。";
-  for (const { number, entered, expected } of grades) {
+  for (const { number, entered, expected, failureReason } of grades) {
     const item = document.createElement("li");
     const link = document.createElement("a");
     link.className = "review-card";
@@ -473,7 +502,9 @@ function renderReviewedPapers(grades) {
     const scores = document.createElement("span");
     const verdict = document.createElement("span");
     label.textContent = `第 ${number} 張`;
-    scores.textContent = entered === null ? `分數無法辨識 · 應得 ${expected} 分` : `你給 ${entered} 分 · 應得 ${expected} 分`;
+    scores.textContent = entered === null ?
+      `分數無法辨識 · 應得 ${expected} 分 · 原因：${failureReason || "未提供診斷"}` :
+      `你給 ${entered} 分 · 應得 ${expected} 分`;
     verdict.className = entered === expected ? "review-verdict correct" : "review-verdict";
     verdict.textContent = entered === null ? "辨識失敗" : entered === expected ? "給分正確" : "給分有誤";
     const snapshot = submittedPapers.get(String(number));
