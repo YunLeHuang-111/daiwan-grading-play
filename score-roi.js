@@ -203,7 +203,11 @@
     const merged = [];
     for (const run of runs) {
       const previous = merged.at(-1);
-      if (previous && run.left - previous.right - 1 <= mergeGap && previous.right - previous.left + 1 < box.height * .32) {
+      const previousBox = previous && boxForColumns(cleaned, previous.left, previous.right);
+      const currentBox = boxForColumns(cleaned, run.left, run.right);
+      const fullHeightPair = previousBox && currentBox &&
+        previousBox.height >= box.height * .55 && currentBox.height >= box.height * .55;
+      if (previous && !fullHeightPair && run.left - previous.right - 1 <= mergeGap && previous.right - previous.left + 1 < box.height * .32) {
         previous.right = run.right;
       } else {
         merged.push({ ...run });
@@ -306,21 +310,35 @@
     return exponentials.map(value => value / total);
   }
 
-  function classifyDigit(probabilities) {
+  function classifyDigit(probabilitySet) {
+    const probabilities = probabilitySet?.probabilities ?? probabilitySet;
     if (!probabilities || probabilities.length < 2) return null;
     const ranked = Array.from(probabilities, (probability, value) => ({ value, probability }))
       .sort((a, b) => b.probability - a.probability);
+    const votes = probabilitySet?.votes;
+    const variantCount = probabilitySet?.variantCount ?? (votes ? Array.from(votes).reduce((sum, vote) => sum + vote, 0) : 0);
+    const rankedVotes = votes ? Array.from(votes, (vote, value) => ({ value, vote })).sort((a, b) => b.vote - a.vote) : [];
+    const voteRatio = variantCount ? rankedVotes[0].vote / variantCount : 0;
+    const voteMargin = variantCount ? (rankedVotes[0].vote - rankedVotes[1].vote) / variantCount : 0;
+    const value = voteRatio >= .5 ? rankedVotes[0].value : ranked[0].value;
+    const alternatives = ranked.filter(candidate => candidate.value !== value);
     return {
-      value: ranked[0].value,
-      confidence: ranked[0].probability,
-      margin: ranked[0].probability - ranked[1].probability,
+      value,
+      confidence: probabilities[value],
+      margin: probabilities[value] - alternatives[0].probability,
+      voteRatio,
+      voteMargin,
       probabilities: Array.from(probabilities),
+      votes: votes ? Array.from(votes) : [],
     };
   }
 
   function decodeRoundedScore(probabilitySets, digitCount, options = {}) {
-    const confidenceThreshold = options.confidenceThreshold ?? .72;
-    const marginThreshold = options.marginThreshold ?? .16;
+    const confidenceThreshold = options.confidenceThreshold ?? .6;
+    const marginThreshold = options.marginThreshold ?? .08;
+    const consensusThreshold = options.consensusThreshold ?? 2 / 3;
+    const consensusConfidenceThreshold = options.consensusConfidenceThreshold ?? .25;
+    const consensusVoteMarginThreshold = options.consensusVoteMarginThreshold ?? 1 / 3;
     const requiredDigits = Math.min(digitCount, 2);
     if (!Array.isArray(probabilitySets) || digitCount < 1 || digitCount > 3 || probabilitySets.length < requiredDigits) {
       return { status: "invalid", score: null, rawText: "", confidence: 0, digitCount };
@@ -340,7 +358,10 @@
     if (score === null || !isAllowedScore(score)) {
       return { status: "invalid", score: null, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
     }
-    if (confidence < confidenceThreshold || margin < marginThreshold) {
+    const highConfidence = confidence >= confidenceThreshold && margin >= marginThreshold;
+    const stableConsensus = digits[0].voteRatio >= consensusThreshold &&
+      confidence >= consensusConfidenceThreshold && digits[0].voteMargin >= consensusVoteMarginThreshold;
+    if (!highConfidence && !stableConsensus) {
       return { status: "low_confidence", score: null, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
     }
     return { status: "ok", score, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };

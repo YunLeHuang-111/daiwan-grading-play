@@ -38,18 +38,27 @@
     for (const digit of segmented.digits.slice(0, 2)) {
       const variants = root.ScoreRoi.normalizeDigitVariants(segmented.mask, digit);
       const probabilities = new Float32Array(10);
+      const votes = new Uint8Array(10);
       for (const values of variants) {
         const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
         const output = await session.run({ [session.inputNames[0]]: tensor });
         const variantProbabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
         variantProbabilities.forEach((value, index) => { probabilities[index] += value / variants.length; });
+        let winner = 0;
+        for (let index = 1; index < variantProbabilities.length; index++) {
+          if (variantProbabilities[index] > variantProbabilities[winner]) winner = index;
+        }
+        votes[winner]++;
       }
-      probabilitySets.push(probabilities);
+      probabilitySets.push({ probabilities, votes, variantCount: variants.length });
     }
     return {
       ...root.ScoreRoi.decodeRoundedScore(probabilitySets, segmented.digits.length, {
-        confidenceThreshold: .65,
-        marginThreshold: .12,
+        confidenceThreshold: .6,
+        marginThreshold: .08,
+        consensusThreshold: 2 / 3,
+        consensusConfidenceThreshold: .25,
+        consensusVoteMarginThreshold: 1 / 3,
       }),
       bounds: captured.bounds,
     };

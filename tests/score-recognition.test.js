@@ -97,6 +97,28 @@ test("segmentation recursively separates a touching 100", () => {
   assert.equal(result.digits.length, 3);
 });
 
+test("segmentation keeps a tightly spaced 100 as three full-height digits", () => {
+  const width = 42;
+  const height = 36;
+  const data = new Uint8Array(width * height);
+  let foregroundPixels = 0;
+  const set = (x, y) => {
+    const index = y * width + x;
+    if (!data[index]) { data[index] = 1; foregroundPixels++; }
+  };
+  for (let y = 3; y <= 32; y++) {
+    for (let x = 4; x <= 7; x++) set(x, y);
+    for (const [left, right] of [[9, 20], [22, 33]]) {
+      for (let x = left; x <= right; x++) {
+        if (y <= 5 || y >= 30 || x <= left + 1 || x >= right - 1) set(x, y);
+      }
+    }
+  }
+  const result = segmentDigits({ data, width, height, foregroundPixels });
+  assert.equal(result.status, "ok");
+  assert.equal(result.digits.length, 3);
+});
+
 test("segmentation ignores a small extra stroke after two valid digits", () => {
   const mask = scoreMask("20");
   for (let y = 10; y <= 12; y++) {
@@ -144,6 +166,23 @@ function prediction(value, confidence = .9) {
   return probabilities;
 }
 
+function ensemblePrediction(value, confidence = .42, agreeingVariants = 5) {
+  const votes = Array(10).fill(0);
+  votes[value] = agreeingVariants;
+  votes[(value + 1) % 10] = 6 - agreeingVariants;
+  return { probabilities: prediction(value, confidence), votes, variantCount: 6 };
+}
+
+function votePreferredPrediction(value, averageWinner) {
+  const probabilities = Array(10).fill(.025);
+  probabilities[value] = .35;
+  probabilities[averageWinner] = .4;
+  const votes = Array(10).fill(0);
+  votes[value] = 5;
+  votes[averageWinner] = 1;
+  return { probabilities, votes, variantCount: 6 };
+}
+
 test("stable softmax handles very large logits", () => {
   const probabilities = softmax([10000, 10001, 9999]);
   assert.ok(probabilities.every(Number.isFinite));
@@ -176,6 +215,21 @@ test("decoder recognizes two digits and rounds the result down to tens", () => {
   const noisyOnes = decodeRoundedScore([prediction(6), prediction(9, .3)], 2);
   assert.equal(noisyOnes.status, "ok");
   assert.equal(noisyOnes.score, 60);
+
+  for (const leadingDigit of [3, 7, 8, 9]) {
+    const consensus = decodeRoundedScore([ensemblePrediction(leadingDigit), prediction(0)], 2);
+    assert.equal(consensus.status, "ok", String(leadingDigit));
+    assert.equal(consensus.score, leadingDigit * 10, String(leadingDigit));
+    assert.ok(consensus.digits[0].voteRatio >= 5 / 6);
+  }
+
+  const votePreferred = decodeRoundedScore([votePreferredPrediction(3, 8), prediction(0)], 2);
+  assert.equal(votePreferred.status, "ok");
+  assert.equal(votePreferred.leadingDigit, 3);
+  assert.equal(votePreferred.score, 30);
+
+  const dividedVote = decodeRoundedScore([ensemblePrediction(8, .42, 3), prediction(0)], 2);
+  assert.equal(dividedVote.status, "low_confidence");
 
   assert.equal(decodeRoundedScore([prediction(6)], 1).status, "invalid");
   assert.equal(decodeRoundedScore([prediction(0), prediction(6)], 2).status, "invalid");
