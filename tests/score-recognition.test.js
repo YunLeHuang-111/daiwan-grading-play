@@ -13,6 +13,7 @@ const {
   normalizeDigitVariants,
   normalizeDigitVariantSets,
   binarizeDigit28,
+  deskewDigit28,
   softmax,
   decodeRoundedScore,
   isAllowedScore,
@@ -39,6 +40,13 @@ test("ROI clamps partial and fully out-of-canvas zones", () => {
   assert.deepEqual(getScoreRoiBounds(rect(0, 0, 100, 100), rect(120, 120, 10, 10), 200, 200, 0), {
     x: 200, y: 200, width: 0, height: 0,
   });
+});
+
+test("ROI is intersected with the paper even if the canvas box is larger", () => {
+  assert.deepEqual(
+    getScoreRoiBounds(rect(0, 0, 120, 120), rect(90, 0, 40, 30), 120, 120, 0, rect(10, 10, 100, 100)),
+    { x: 90, y: 10, width: 20, height: 20 },
+  );
 });
 
 test("extractScoreInk reads only alpha from the dynamic ROI", () => {
@@ -168,6 +176,30 @@ test("candidate segmentation recovers close digits that the default strategy mer
   assert.ok(candidates.some(candidate => candidate.digits.length === 2 && candidate.strategy === "no-merge"));
 });
 
+test("fragment-tolerant segmentation recovers a short but substantial digit", () => {
+  const width = 30;
+  const height = 36;
+  const data = new Uint8Array(width * height);
+  let foregroundPixels = 0;
+  const set = (x, y) => {
+    const index = y * width + x;
+    if (!data[index]) { data[index] = 1; foregroundPixels++; }
+  };
+  for (let y = 3; y <= 32; y++) {
+    for (let x = 2; x <= 13; x++) {
+      if (y <= 5 || y >= 30 || x <= 3 || x >= 12) set(x, y);
+    }
+  }
+  for (let y = 25; y <= 32; y++) for (let x = 20; x <= 23; x++) set(x, y);
+  const mask = { data, width, height, foregroundPixels };
+  const strict = segmentDigits(mask);
+  assert.equal(strict.status, "low_confidence");
+  assert.equal(strict.digits.length, 1);
+  assert.ok(strict.ignoredPixels > 0);
+  const candidates = segmentDigitCandidates(mask);
+  assert.ok(candidates.some(candidate => candidate.strategy === "fragment-tolerant" && candidate.digits.length === 2));
+});
+
 test("geometry distinguishes a wide-top 7 from a narrow 1", () => {
   const width = 20;
   const height = 30;
@@ -220,7 +252,7 @@ test("normalization provides translation and stroke-width TTA variants", () => {
   const mask = scoreMask("6");
   const box = segmentDigits(mask).digits[0];
   const variants = normalizeDigitVariants(mask, box);
-  assert.equal(variants.length, 6);
+  assert.equal(variants.length, 7);
   assert.ok(variants.every(values => values instanceof Float32Array && values.length === 784));
   assert.notDeepEqual(Array.from(variants[0]), Array.from(variants[1]));
   assert.ok(variants[5].reduce((sum, value) => sum + value, 0) > variants[0].reduce((sum, value) => sum + value, 0));
@@ -231,11 +263,24 @@ test("normalization provides grayscale and binary fallback ensembles", () => {
   mask.intensity = Float32Array.from(mask.data, value => value ? .55 : 0);
   const box = segmentDigits(mask).digits[0];
   const sets = normalizeDigitVariantSets(mask, box);
-  assert.equal(sets.grayscale.length, 6);
-  assert.equal(sets.binary.length, 6);
+  assert.equal(sets.grayscale.length, 7);
+  assert.equal(sets.binary.length, 7);
   assert.ok(sets.grayscale[0].some(value => value > 0 && value < 1));
   assert.ok(sets.binary[0].every(value => value === 0 || value === 1));
   assert.deepEqual(Array.from(binarizeDigit28(Float32Array.from([.2, .35, .8]))), [0, 1, 1]);
+});
+
+test("deskew adds a distinct normalized view for slanted strokes", () => {
+  const values = new Float32Array(28 * 28);
+  for (let y = 4; y <= 23; y++) {
+    const x = 8 + Math.floor((y - 4) / 4);
+    values[y * 28 + x] = 1;
+    values[y * 28 + x + 1] = 1;
+  }
+  const deskewed = deskewDigit28(values);
+  assert.equal(deskewed.length, 784);
+  assert.notDeepEqual(Array.from(deskewed), Array.from(values));
+  assert.ok(deskewed.some(value => value > 0 && value < 1));
 });
 
 function prediction(value, confidence = .9) {

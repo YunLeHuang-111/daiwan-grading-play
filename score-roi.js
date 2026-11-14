@@ -11,16 +11,20 @@
     return Math.max(minimum, Math.min(maximum, value));
   }
 
-  function getScoreRoiBounds(canvasRect, zoneRect, canvasWidth, canvasHeight, paddingCss = 3) {
+  function getScoreRoiBounds(canvasRect, zoneRect, canvasWidth, canvasHeight, paddingCss = 3, containmentRect = canvasRect) {
     if (!canvasRect || !zoneRect || canvasRect.width <= 0 || canvasRect.height <= 0 || canvasWidth <= 0 || canvasHeight <= 0) {
       return { x: 0, y: 0, width: 0, height: 0 };
     }
     const scaleX = canvasWidth / canvasRect.width;
     const scaleY = canvasHeight / canvasRect.height;
-    const left = Math.floor((zoneRect.left - paddingCss - canvasRect.left) * scaleX);
-    const top = Math.floor((zoneRect.top - paddingCss - canvasRect.top) * scaleY);
-    const right = Math.ceil((zoneRect.right + paddingCss - canvasRect.left) * scaleX);
-    const bottom = Math.ceil((zoneRect.bottom + paddingCss - canvasRect.top) * scaleY);
+    const safeLeft = Math.max(canvasRect.left, containmentRect?.left ?? canvasRect.left, zoneRect.left - paddingCss);
+    const safeTop = Math.max(canvasRect.top, containmentRect?.top ?? canvasRect.top, zoneRect.top - paddingCss);
+    const safeRight = Math.min(canvasRect.right, containmentRect?.right ?? canvasRect.right, zoneRect.right + paddingCss);
+    const safeBottom = Math.min(canvasRect.bottom, containmentRect?.bottom ?? canvasRect.bottom, zoneRect.bottom + paddingCss);
+    const left = Math.floor((safeLeft - canvasRect.left) * scaleX);
+    const top = Math.floor((safeTop - canvasRect.top) * scaleY);
+    const right = Math.ceil((safeRight - canvasRect.left) * scaleX);
+    const bottom = Math.ceil((safeBottom - canvasRect.top) * scaleY);
     const x = clamp(left, 0, canvasWidth);
     const y = clamp(top, 0, canvasHeight);
     return {
@@ -47,12 +51,14 @@
   }
 
   function extractScoreInk({ inkCanvas, scoreZone, paddingCss = 3, alphaThreshold = 18 }) {
+    const paperRect = inkCanvas.closest?.(".paper")?.getBoundingClientRect?.() || inkCanvas.getBoundingClientRect();
     const bounds = getScoreRoiBounds(
       inkCanvas.getBoundingClientRect(),
       scoreZone.getBoundingClientRect(),
       inkCanvas.width,
       inkCanvas.height,
       paddingCss,
+      paperRect,
     );
     if (!bounds.width || !bounds.height) return { status: "empty", bounds, mask: null };
     const pixels = inkCanvas.getContext("2d").getImageData(bounds.x, bounds.y, bounds.width, bounds.height);
@@ -203,6 +209,9 @@
 
   function segmentDigits(mask, options = {}) {
     const minimumPixels = options.minimumPixels ?? Math.max(8, Math.round(mask.width * mask.height * .0008));
+    const digitPixelRatio = options.digitPixelRatio ?? 1;
+    const minimumHeightRatio = options.minimumHeightRatio ?? .35;
+    const ignoredPixelRatio = options.ignoredPixelRatio ?? .08;
     const cleaned = removeComponentNoise(mask, Math.max(2, Math.floor(minimumPixels * .25)));
     const box = foregroundBox(cleaned);
     if (!box || (mask.foregroundPixels ?? box.width * box.height) < minimumPixels) return { status: "empty", digits: [] };
@@ -227,11 +236,13 @@
     }
     const split = merged.flatMap(run => splitWideRun(cleaned, run, box.height, options));
     const digits = split.map(run => boxForColumns(cleaned, run.left, run.right)).filter(Boolean);
-    const substantial = digits.filter(digit => digit.pixels >= minimumPixels && digit.height >= Math.max(4, box.height * .35));
+    const substantial = digits.filter(digit =>
+      digit.pixels >= Math.max(3, minimumPixels * digitPixelRatio) &&
+      digit.height >= Math.max(4, box.height * minimumHeightRatio));
     if (!substantial.length) return { status: "empty", digits: [] };
     const accepted = new Set(substantial);
     const ignoredPixels = digits.reduce((total, digit) => total + (accepted.has(digit) ? 0 : digit.pixels), 0);
-    const ignoredPixelLimit = Math.max(minimumPixels, Math.round(cleaned.foregroundPixels * .08));
+    const ignoredPixelLimit = Math.max(minimumPixels, Math.round(cleaned.foregroundPixels * ignoredPixelRatio));
     if (substantial.length > 3 || ignoredPixels > ignoredPixelLimit) {
       return { status: "low_confidence", digits: substantial, ignoredPixels };
     }
@@ -244,6 +255,15 @@
       { strategy: "no-merge", mergeGapRatio: 0 },
       { strategy: "aggressive-split", mergeGapRatio: .04, splitWidthRatio: .68, valleyRatio: .58 },
       { strategy: "conservative-split", mergeGapRatio: .03, splitWidthRatio: .96, valleyRatio: .32, maxSplitDepth: 1 },
+      {
+        strategy: "fragment-tolerant",
+        mergeGapRatio: .03,
+        splitWidthRatio: .74,
+        valleyRatio: .55,
+        digitPixelRatio: .45,
+        minimumHeightRatio: .22,
+        ignoredPixelRatio: .18,
+      },
     ];
     const candidates = [];
     const signatures = new Set();
@@ -347,6 +367,44 @@
     return output;
   }
 
+  function deskewDigit28(values) {
+    let mass = 0;
+    let centerX = 0;
+    let centerY = 0;
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        const value = values[y * 28 + x];
+        mass += value;
+        centerX += x * value;
+        centerY += y * value;
+      }
+    }
+    if (!mass) return new Float32Array(values);
+    centerX /= mass;
+    centerY /= mass;
+    let covariance = 0;
+    let verticalVariance = 0;
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        const value = values[y * 28 + x];
+        covariance += (x - centerX) * (y - centerY) * value;
+        verticalVariance += (y - centerY) ** 2 * value;
+      }
+    }
+    const skew = clamp(verticalVariance ? covariance / verticalVariance : 0, -.55, .55);
+    const output = new Float32Array(28 * 28);
+    const sample = (x, y) => x >= 0 && x < 28 && y >= 0 && y < 28 ? values[y * 28 + x] : 0;
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        const sx = x + skew * (y - centerY);
+        const x0 = Math.floor(sx);
+        const fraction = sx - x0;
+        output[y * 28 + x] = sample(x0, y) * (1 - fraction) + sample(x0 + 1, y) * fraction;
+      }
+    }
+    return output;
+  }
+
   function digitVariants(base) {
     return [
       base,
@@ -355,6 +413,7 @@
       transformDigit28(base, { dy: -1 }),
       transformDigit28(base, { dy: 1 }),
       transformDigit28(base, { dilate: true }),
+      deskewDigit28(base),
     ];
   }
 
@@ -464,6 +523,7 @@
     normalizeDigitVariantSets,
     binarizeDigit28,
     transformDigit28,
+    deskewDigit28,
     softmax,
     decodeRoundedScore,
     isAllowedScore,

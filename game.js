@@ -640,7 +640,10 @@ function redrawInk() {
 }
 
 function point(event, box = ink.getBoundingClientRect()) {
-  return [(event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height];
+  return [
+    Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)),
+    Math.max(0, Math.min(1, (event.clientY - box.top) / box.height)),
+  ];
 }
 
 function clearInk(options = {}) {
@@ -658,10 +661,10 @@ function scoreZoneInInkCoordinates() {
   const inkRect = ink.getBoundingClientRect();
   const zoneRect = scoreZone.getBoundingClientRect();
   return {
-    left: (zoneRect.left - inkRect.left) / inkRect.width,
-    right: (zoneRect.right - inkRect.left) / inkRect.width,
-    top: (zoneRect.top - inkRect.top) / inkRect.height,
-    bottom: (zoneRect.bottom - inkRect.top) / inkRect.height,
+    left: Math.max(0, Math.min(1, (zoneRect.left - inkRect.left) / inkRect.width)),
+    right: Math.max(0, Math.min(1, (zoneRect.right - inkRect.left) / inkRect.width)),
+    top: Math.max(0, Math.min(1, (zoneRect.top - inkRect.top) / inkRect.height)),
+    bottom: Math.max(0, Math.min(1, (zoneRect.bottom - inkRect.top) / inkRect.height)),
   };
 }
 
