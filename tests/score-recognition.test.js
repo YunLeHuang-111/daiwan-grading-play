@@ -10,6 +10,8 @@ const {
   segmentDigitCandidates,
   normalizeDigit28,
   normalizeDigitVariants,
+  normalizeDigitVariantSets,
+  binarizeDigit28,
   softmax,
   decodeRoundedScore,
   isAllowedScore,
@@ -201,6 +203,18 @@ test("normalization provides translation and stroke-width TTA variants", () => {
   assert.ok(variants.every(values => values instanceof Float32Array && values.length === 784));
   assert.notDeepEqual(Array.from(variants[0]), Array.from(variants[1]));
   assert.ok(variants[5].reduce((sum, value) => sum + value, 0) > variants[0].reduce((sum, value) => sum + value, 0));
+});
+
+test("normalization provides grayscale and binary fallback ensembles", () => {
+  const mask = scoreMask("8");
+  mask.intensity = Float32Array.from(mask.data, value => value ? .55 : 0);
+  const box = segmentDigits(mask).digits[0];
+  const sets = normalizeDigitVariantSets(mask, box);
+  assert.equal(sets.grayscale.length, 6);
+  assert.equal(sets.binary.length, 6);
+  assert.ok(sets.grayscale[0].some(value => value > 0 && value < 1));
+  assert.ok(sets.binary[0].every(value => value === 0 || value === 1));
+  assert.deepEqual(Array.from(binarizeDigit28(Float32Array.from([.2, .35, .8]))), [0, 1, 1]);
 });
 
 function prediction(value, confidence = .9) {

@@ -27,10 +27,11 @@
     return { stage, code, ...details };
   }
 
-  async function inferSegmented(session, segmented) {
+  async function inferSegmented(session, segmented, preprocessing = "grayscale") {
     const probabilitySets = [];
     for (const digit of segmented.digits.slice(0, 2)) {
-      const variants = root.ScoreRoi.normalizeDigitVariants(segmented.mask, digit);
+      const variantSets = root.ScoreRoi.normalizeDigitVariantSets(segmented.mask, digit);
+      const variants = variantSets[preprocessing];
       const probabilities = new Float32Array(10);
       const votes = new Uint8Array(10);
       for (const values of variants) {
@@ -56,13 +57,15 @@
     const leading = decoded.digits?.[0];
     const ignoredRatio = (segmented.ignoredPixels || 0) / Math.max(1, segmented.mask.foregroundPixels);
     const quality = (decoded.status === "ok" ? 2 : 0) + (decoded.confidence || 0) +
-      (leading?.voteRatio || 0) * .25 + Math.max(0, leading?.margin || 0) * .1 - ignoredRatio;
+      (leading?.voteRatio || 0) * .25 + Math.max(0, leading?.margin || 0) * .1 - ignoredRatio -
+      (preprocessing === "binary" ? .01 : 0);
     return { decoded, leading, quality };
   }
 
-  function candidateSummary(segmented, evaluated) {
+  function candidateSummary(segmented, evaluated, preprocessing) {
     return {
       strategy: segmented.strategy || "default",
+      preprocessing,
       status: evaluated.decoded.status,
       score: evaluated.decoded.score,
       rawText: evaluated.decoded.rawText,
@@ -113,11 +116,18 @@
 
     try {
       const attempts = [];
-      const primary = await inferSegmented(session, candidates[0]);
-      attempts.push({ segmented: candidates[0], evaluated: primary });
-      if (primary.decoded.status !== "ok") {
+      for (const preprocessing of ["grayscale", "binary"]) {
+        const evaluated = await inferSegmented(session, candidates[0], preprocessing);
+        attempts.push({ segmented: candidates[0], evaluated, preprocessing });
+        if (evaluated.decoded.status === "ok") break;
+      }
+      if (!attempts.some(attempt => attempt.evaluated.decoded.status === "ok")) {
         for (const candidate of candidates.slice(1)) {
-          attempts.push({ segmented: candidate, evaluated: await inferSegmented(session, candidate) });
+          for (const preprocessing of ["grayscale", "binary"]) {
+            const evaluated = await inferSegmented(session, candidate, preprocessing);
+            attempts.push({ segmented: candidate, evaluated, preprocessing });
+            if (evaluated.decoded.status === "ok") break;
+          }
         }
       }
       const successful = attempts.filter(attempt => attempt.evaluated.decoded.status === "ok");
@@ -138,8 +148,9 @@
           voteMargin: leading?.voteMargin ?? 0,
           votes: leading?.votes ?? [],
           candidateCount: candidates.length,
-          chosenStrategy: chosen.segmented.strategy || "default",
-          candidateAttempts: attempts.map(attempt => candidateSummary(attempt.segmented, attempt.evaluated)),
+          attemptCount: attempts.length,
+          chosenStrategy: `${chosen.segmented.strategy || "default"}/${chosen.preprocessing}`,
+          candidateAttempts: attempts.map(attempt => candidateSummary(attempt.segmented, attempt.evaluated, attempt.preprocessing)),
         }),
       };
     } catch (error) {

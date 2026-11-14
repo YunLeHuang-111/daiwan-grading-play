@@ -325,8 +325,7 @@
     return output;
   }
 
-  function normalizeDigitVariants(mask, box) {
-    const base = normalizeDigit28(mask, box);
+  function digitVariants(base) {
     return [
       base,
       transformDigit28(base, { dx: -1 }),
@@ -335,6 +334,23 @@
       transformDigit28(base, { dy: 1 }),
       transformDigit28(base, { dilate: true }),
     ];
+  }
+
+  function binarizeDigit28(values, threshold = .35) {
+    return Float32Array.from(values, value => value + 1e-6 >= threshold ? 1 : 0);
+  }
+
+  function normalizeDigitVariantSets(mask, box) {
+    const grayscale = normalizeDigit28(mask, box);
+    const binary = binarizeDigit28(grayscale);
+    return {
+      grayscale: digitVariants(grayscale),
+      binary: digitVariants(binary),
+    };
+  }
+
+  function normalizeDigitVariants(mask, box) {
+    return normalizeDigitVariantSets(mask, box).grayscale;
   }
 
   function softmax(logits) {
@@ -422,6 +438,8 @@
     segmentDigitCandidates,
     normalizeDigit28,
     normalizeDigitVariants,
+    normalizeDigitVariantSets,
+    binarizeDigit28,
     transformDigit28,
     softmax,
     decodeRoundedScore,

@@ -20,7 +20,10 @@ test("recognizer retries alternative segmentation after the default candidate fa
   global.ScoreRoi = {
     segmentDigits: () => primary,
     segmentDigitCandidates: () => [primary, alternative],
-    normalizeDigitVariants: (_mask, digit) => [Float32Array.of(digit.marker)],
+    normalizeDigitVariantSets: (_mask, digit) => ({
+      grayscale: [Float32Array.of(digit.marker)],
+      binary: [Float32Array.of(digit.marker)],
+    }),
     softmax: values => values,
     decodeRoundedScore: probabilitySets => {
       const recovered = probabilitySets[0].probabilities[0] === 1;
@@ -51,6 +54,53 @@ test("recognizer retries alternative segmentation after the default candidate fa
   assert.equal(result.status, "ok");
   assert.equal(result.score, 30);
   assert.equal(result.diagnostic.candidateCount, 2);
-  assert.equal(result.diagnostic.chosenStrategy, "no-merge");
-  assert.deepEqual(result.diagnostic.candidateAttempts.map(attempt => attempt.status), ["low_confidence", "ok"]);
+  assert.equal(result.diagnostic.chosenStrategy, "no-merge/grayscale");
+  assert.deepEqual(result.diagnostic.candidateAttempts.map(attempt => attempt.status), ["low_confidence", "low_confidence", "ok"]);
+});
+
+test("recognizer retries binary preprocessing after grayscale confidence is low", async () => {
+  const candidate = {
+    strategy: "default",
+    digits: [{ marker: 0 }, { marker: 0 }],
+    mask: { foregroundPixels: 20 },
+    ignoredPixels: 0,
+  };
+  global.ScoreRoi = {
+    segmentDigits: () => candidate,
+    segmentDigitCandidates: () => [candidate],
+    normalizeDigitVariantSets: () => ({
+      grayscale: [Float32Array.of(0)],
+      binary: [Float32Array.of(1)],
+    }),
+    softmax: values => values,
+    decodeRoundedScore: probabilitySets => {
+      const recovered = probabilitySets[0].probabilities[0] === 1;
+      const digit = { value: 1, confidence: recovered ? .92 : .28, margin: recovered ? .85 : .01, voteRatio: 1, voteMargin: 1, votes: [1] };
+      return recovered ?
+        { status: "ok", score: 10, rawText: "10", confidence: .92, leadingDigit: 1, digits: [digit] } :
+        { status: "low_confidence", score: null, rawText: "10", confidence: .28, leadingDigit: 1, digits: [digit] };
+    },
+  };
+  global.ort = {
+    env: { wasm: {} },
+    Tensor: class Tensor {
+      constructor(_type, data) { this.data = data; }
+    },
+    InferenceSession: {
+      create: async () => ({
+        inputNames: ["input"],
+        outputNames: ["output"],
+        run: async feeds => ({ output: { data: [feeds.input.data[0], 0, 0, 0, 0, 0, 0, 0, 0, 0] } }),
+      }),
+    },
+  };
+
+  delete require.cache[require.resolve("../score-recognizer.js")];
+  require("../score-recognizer.js");
+  const result = await global.scoreRecognizer.recognizeCapture({ status: "ok", mask: {}, bounds: { x: 0, y: 0, width: 10, height: 10 } });
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.score, 10);
+  assert.equal(result.diagnostic.chosenStrategy, "default/binary");
+  assert.deepEqual(result.diagnostic.candidateAttempts.map(attempt => attempt.preprocessing), ["grayscale", "binary"]);
 });
