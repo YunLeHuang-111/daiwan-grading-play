@@ -258,6 +258,28 @@
     return candidates;
   }
 
+  function leadingDigitGeometryHint(mask, box) {
+    if (!mask?.data || !box?.width || !box?.height) return null;
+    const topBottom = Math.min(box.bottom, box.top + Math.max(1, Math.round(box.height * .25)) - 1);
+    let topLeft = box.right + 1;
+    let topRight = box.left - 1;
+    let topPixels = 0;
+    for (let y = box.top; y <= topBottom; y++) {
+      for (let x = box.left; x <= box.right; x++) {
+        if (!mask.data[y * mask.width + x]) continue;
+        topLeft = Math.min(topLeft, x);
+        topRight = Math.max(topRight, x);
+        topPixels++;
+      }
+    }
+    const aspectRatio = box.width / box.height;
+    const topSpanRatio = topRight >= topLeft ? (topRight - topLeft + 1) / box.width : 0;
+    if (aspectRatio >= .42 && topSpanRatio >= .72 && topPixels >= Math.max(3, box.width * .6)) {
+      return { digit: 7, aspectRatio, topSpanRatio, topPixels };
+    }
+    return null;
+  }
+
   function normalizeDigit28(mask, box) {
     const scale = Math.min(20 / box.width, 20 / box.height);
     const targetWidth = Math.max(1, Math.round(box.width * scale));
@@ -436,6 +458,7 @@
     removeComponentNoise,
     segmentDigits,
     segmentDigitCandidates,
+    leadingDigitGeometryHint,
     normalizeDigit28,
     normalizeDigitVariants,
     normalizeDigitVariantSets,

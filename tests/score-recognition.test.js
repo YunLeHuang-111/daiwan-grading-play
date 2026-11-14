@@ -8,6 +8,7 @@ const {
   extractScoreInk,
   segmentDigits,
   segmentDigitCandidates,
+  leadingDigitGeometryHint,
   normalizeDigit28,
   normalizeDigitVariants,
   normalizeDigitVariantSets,
@@ -165,6 +166,26 @@ test("candidate segmentation recovers close digits that the default strategy mer
   assert.equal(segmentDigits(mask).digits.length, 1);
   const candidates = segmentDigitCandidates(mask);
   assert.ok(candidates.some(candidate => candidate.digits.length === 2 && candidate.strategy === "no-merge"));
+});
+
+test("geometry distinguishes a wide-top 7 from a narrow 1", () => {
+  const width = 20;
+  const height = 30;
+  const sevenData = new Uint8Array(width * height);
+  for (let x = 2; x <= 17; x++) for (let y = 1; y <= 3; y++) sevenData[y * width + x] = 1;
+  for (let y = 4; y <= 27; y++) {
+    const x = Math.max(5, 16 - Math.floor((y - 4) * 10 / 23));
+    sevenData[y * width + x] = 1;
+    sevenData[y * width + Math.max(0, x - 1)] = 1;
+  }
+  const sevenBox = { left: 2, top: 1, right: 17, bottom: 27, width: 16, height: 27 };
+  const hint = leadingDigitGeometryHint({ data: sevenData, width, height }, sevenBox);
+  assert.equal(hint.digit, 7);
+
+  const oneData = new Uint8Array(width * height);
+  for (let y = 1; y <= 27; y++) for (let x = 8; x <= 10; x++) oneData[y * width + x] = 1;
+  const oneBox = { left: 8, top: 1, right: 10, bottom: 27, width: 3, height: 27 };
+  assert.equal(leadingDigitGeometryHint({ data: oneData, width, height }, oneBox), null);
 });
 
 test("segmentation rejects empty ink and isolated noise", () => {

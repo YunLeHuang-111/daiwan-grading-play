@@ -190,3 +190,69 @@ test("recognizer rejects tied low-confidence score groups", async () => {
   assert.equal(result.diagnostic.recoveredByConsensus, false);
   assert.equal(result.diagnostic.candidateAttempts.length, 4);
 });
+
+test("recognizer checks three-segment candidates before accepting 10", async () => {
+  const candidates = [
+    { strategy: "default", digits: [{ marker: 1 }, { marker: 0 }], mask: { foregroundPixels: 20 }, ignoredPixels: 0 },
+    { strategy: "no-merge", digits: [{ marker: 1 }, { marker: 0 }, { marker: 0 }], mask: { foregroundPixels: 20 }, ignoredPixels: 0 },
+  ];
+  global.ScoreRoi = {
+    segmentDigits: () => candidates[0],
+    segmentDigitCandidates: () => candidates,
+    normalizeDigitVariantSets: (_mask, digit) => ({ grayscale: [Float32Array.of(digit.marker)], binary: [Float32Array.of(digit.marker)] }),
+    softmax: values => values,
+    decodeRoundedScore: (_probabilitySets, digitCount) => {
+      const digit = { value: 1, confidence: .9, margin: .8, voteRatio: 1, voteMargin: 1, votes: [0, 1] };
+      return { status: "ok", score: digitCount === 3 ? 100 : 10, rawText: digitCount === 3 ? "10…" : "10", confidence: .9, leadingDigit: 1, digits: [digit] };
+    },
+  };
+  global.ort = {
+    env: { wasm: {} },
+    Tensor: class Tensor { constructor(_type, data) { this.data = data; } },
+    InferenceSession: { create: async () => ({
+      inputNames: ["input"], outputNames: ["output"],
+      run: async feeds => ({ output: { data: [feeds.input.data[0], 0, 0, 0, 0, 0, 0, 0, 0, 0] } }),
+    }) },
+  };
+
+  delete require.cache[require.resolve("../score-recognizer.js")];
+  require("../score-recognizer.js");
+  const result = await global.scoreRecognizer.recognizeCapture({ status: "ok", mask: {}, bounds: { x: 0, y: 0, width: 10, height: 10 } });
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.score, 100);
+  assert.equal(result.diagnostic.hundredDisambiguation, true);
+  assert.equal(result.diagnostic.segmentCount, 3);
+});
+
+test("recognizer corrects a CNN 1 to 7 only for a wide-top shape", async () => {
+  const candidate = { strategy: "default", digits: [{ marker: 1 }, { marker: 0 }], mask: { foregroundPixels: 20 }, ignoredPixels: 0 };
+  global.ScoreRoi = {
+    segmentDigits: () => candidate,
+    segmentDigitCandidates: () => [candidate],
+    leadingDigitGeometryHint: () => ({ digit: 7, aspectRatio: .55, topSpanRatio: .9, topPixels: 12 }),
+    normalizeDigitVariantSets: (_mask, digit) => ({ grayscale: [Float32Array.of(digit.marker)], binary: [Float32Array.of(digit.marker)] }),
+    softmax: values => values,
+    decodeRoundedScore: () => {
+      const digits = [{ value: 1, confidence: .9, margin: .8, voteRatio: 1, voteMargin: 1, votes: [0, 1] }, { value: 0 }];
+      return { status: "ok", score: 10, rawText: "10", confidence: .9, leadingDigit: 1, recognizedNumber: 10, digits };
+    },
+  };
+  global.ort = {
+    env: { wasm: {} },
+    Tensor: class Tensor { constructor(_type, data) { this.data = data; } },
+    InferenceSession: { create: async () => ({
+      inputNames: ["input"], outputNames: ["output"],
+      run: async feeds => ({ output: { data: [feeds.input.data[0], 0, 0, 0, 0, 0, 0, 0, 0, 0] } }),
+    }) },
+  };
+
+  delete require.cache[require.resolve("../score-recognizer.js")];
+  require("../score-recognizer.js");
+  const result = await global.scoreRecognizer.recognizeCapture({ status: "ok", mask: {}, bounds: { x: 0, y: 0, width: 10, height: 10 } });
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.score, 70);
+  assert.deepEqual(result.diagnostic.geometryCorrection.from, 1);
+  assert.deepEqual(result.diagnostic.geometryCorrection.to, 7);
+});

@@ -335,7 +335,9 @@ async function recognizeCurrentScore({ previewOnly = false } = {}) {
   if (result.status === "ok") {
     setGrade(result.score);
     const percent = Math.round(result.confidence * 100);
-    const method = result.diagnostic?.recoveredByConsensus ? `，跨候選共識 ${result.diagnostic.consensusSupport} 票` : "";
+    const method = result.diagnostic?.geometryCorrection ? "，7／1 字形修正" :
+      result.diagnostic?.hundredDisambiguation && result.score === 100 ? "，100 三段確認" :
+      result.diagnostic?.recoveredByConsensus ? `，跨候選共識 ${result.diagnostic.consensusSupport} 票` : "";
     setRecognitionStatus(`辨識到 ${result.score} 分（信心 ${percent}%${method}）。`);
     message();
     updateControls();

@@ -27,6 +27,25 @@
     return { stage, code, ...details };
   }
 
+  function applyLeadingGeometryCorrection(decoded, segmented) {
+    if (decoded.leadingDigit !== 1 || segmented.digits.length < 2 || !root.ScoreRoi.leadingDigitGeometryHint) return decoded;
+    const hint = root.ScoreRoi.leadingDigitGeometryHint(segmented.mask, segmented.digits[0]);
+    if (hint?.digit !== 7) return decoded;
+    const ones = decoded.digits?.[1]?.value ?? 0;
+    const rawText = `7${ones}${segmented.digits.length > 2 ? "…" : ""}`;
+    const digits = decoded.digits?.length ? [{ ...decoded.digits[0], value: 7 }, ...decoded.digits.slice(1)] : decoded.digits;
+    return {
+      ...decoded,
+      score: decoded.status === "ok" ? 70 : null,
+      suggestedScore: decoded.status === "ok" ? decoded.suggestedScore : 70,
+      rawText,
+      leadingDigit: 7,
+      recognizedNumber: 70 + ones,
+      digits,
+      geometryCorrection: { from: 1, to: 7, ...hint },
+    };
+  }
+
   async function inferSegmented(session, segmented, preprocessing = "grayscale") {
     const probabilitySets = [];
     for (const digit of segmented.digits.slice(0, 2)) {
@@ -47,13 +66,14 @@
       }
       probabilitySets.push({ probabilities, votes, variantCount: variants.length });
     }
-    const decoded = root.ScoreRoi.decodeRoundedScore(probabilitySets, segmented.digits.length, {
+    let decoded = root.ScoreRoi.decodeRoundedScore(probabilitySets, segmented.digits.length, {
       confidenceThreshold: .6,
       marginThreshold: .08,
       consensusThreshold: 2 / 3,
       consensusConfidenceThreshold: .25,
       consensusVoteMarginThreshold: 1 / 3,
     });
+    decoded = applyLeadingGeometryCorrection(decoded, segmented);
     const leading = decoded.digits?.[0];
     const ignoredRatio = (segmented.ignoredPixels || 0) / Math.max(1, segmented.mask.foregroundPixels);
     const quality = (decoded.status === "ok" ? 2 : 0) + (decoded.confidence || 0) +
@@ -75,6 +95,7 @@
       confidence: evaluated.decoded.confidence,
       voteRatio: evaluated.leading?.voteRatio || 0,
       quality: evaluated.quality,
+      geometryCorrection: evaluated.decoded.geometryCorrection || null,
     };
   }
 
@@ -154,8 +175,12 @@
         attempts.push({ segmented: candidates[0], evaluated, preprocessing });
         if (evaluated.decoded.status === "ok") break;
       }
-      if (!attempts.some(attempt => attempt.evaluated.decoded.status === "ok")) {
-        for (const candidate of candidates.slice(1)) {
+      const initialSuccessful = attempts.filter(attempt => attempt.evaluated.decoded.status === "ok");
+      const needsHundredCheck = initialSuccessful.some(attempt => attempt.evaluated.decoded.score === 10) &&
+        candidates.some(candidate => candidate.digits.length === 3);
+      if (!initialSuccessful.length || needsHundredCheck) {
+        const fallbackCandidates = needsHundredCheck ? candidates.slice(1).filter(candidate => candidate.digits.length === 3) : candidates.slice(1);
+        for (const candidate of fallbackCandidates) {
           for (const preprocessing of ["grayscale", "binary"]) {
             const evaluated = await inferSegmented(session, candidate, preprocessing);
             attempts.push({ segmented: candidate, evaluated, preprocessing });
@@ -164,8 +189,13 @@
         }
       }
       const successful = attempts.filter(attempt => attempt.evaluated.decoded.status === "ok");
-      const recovery = successful.length ? null : consensusRecovery(attempts);
-      const chosen = (successful.length ? successful : recovery ? [recovery.chosen] : attempts)
+      const hundredAttempts = needsHundredCheck ? attempts.filter(attempt => attempt.segmented.digits.length === 3) : [];
+      const hundredSuccessful = hundredAttempts.filter(attempt => attempt.evaluated.decoded.status === "ok" && attempt.evaluated.decoded.score === 100);
+      const hundredRecovery = hundredSuccessful.length ? null : consensusRecovery(hundredAttempts);
+      const recoveredHundred = hundredRecovery?.score === 100 ? hundredRecovery : null;
+      const recovery = hundredSuccessful.length || recoveredHundred ? recoveredHundred : successful.length ? null : consensusRecovery(attempts);
+      const preferred = hundredSuccessful.length ? hundredSuccessful : recoveredHundred ? [recoveredHundred.chosen] : successful.length ? successful : recovery ? [recovery.chosen] : attempts;
+      const chosen = preferred
         .slice().sort((a, b) => b.evaluated.quality - a.evaluated.quality)[0];
       const originalDecoded = chosen.evaluated.decoded;
       const decoded = recovery ? {
@@ -191,6 +221,8 @@
           candidateCount: candidates.length,
           attemptCount: attempts.length,
           chosenStrategy: `${chosen.segmented.strategy || "default"}/${chosen.preprocessing}`,
+          geometryCorrection: decoded.geometryCorrection || null,
+          hundredDisambiguation: needsHundredCheck,
           recoveredByConsensus: Boolean(recovery),
           consensusSupport: recovery?.support ?? 0,
           competingScore: recovery?.competingScore ?? null,
