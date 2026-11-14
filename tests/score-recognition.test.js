@@ -7,6 +7,7 @@ const {
   maskFromRgba,
   extractScoreInk,
   segmentDigits,
+  segmentDigitCandidates,
   normalizeDigit28,
   normalizeDigitVariants,
   softmax,
@@ -50,6 +51,17 @@ test("extractScoreInk reads only alpha from the dynamic ROI", () => {
   assert.deepEqual(calls[0], [140, 10, 8, 6]);
   assert.equal(result.status, "ok");
   assert.equal(result.mask.foregroundPixels, 1);
+  assert.equal(result.mask.intensity[0], 1);
+});
+
+test("mask preserves antialiased alpha intensity for CNN input", () => {
+  const rgba = new Uint8ClampedArray(2 * 4);
+  rgba[3] = 128;
+  rgba[7] = 10;
+  const mask = maskFromRgba(rgba, 2, 1);
+  assert.equal(mask.foregroundPixels, 1);
+  assert.ok(Math.abs(mask.intensity[0] - 128 / 255) < 1e-6);
+  assert.equal(mask.intensity[1], 0);
 });
 
 function scoreMask(text) {
@@ -132,6 +144,27 @@ test("segmentation ignores a small extra stroke after two valid digits", () => {
   assert.equal(result.ignoredPixels, 3);
 });
 
+test("candidate segmentation recovers close digits that the default strategy merges", () => {
+  const width = 28;
+  const height = 36;
+  const data = new Uint8Array(width * height);
+  let foregroundPixels = 0;
+  const set = (x, y) => {
+    const index = y * width + x;
+    if (!data[index]) { data[index] = 1; foregroundPixels++; }
+  };
+  for (let y = 18; y <= 32; y++) for (let x = 4; x <= 7; x++) set(x, y);
+  for (let y = 3; y <= 32; y++) {
+    for (let x = 9; x <= 20; x++) {
+      if (y <= 5 || y >= 30 || x <= 10 || x >= 19) set(x, y);
+    }
+  }
+  const mask = { data, width, height, foregroundPixels };
+  assert.equal(segmentDigits(mask).digits.length, 1);
+  const candidates = segmentDigitCandidates(mask);
+  assert.ok(candidates.some(candidate => candidate.digits.length === 2 && candidate.strategy === "no-merge"));
+});
+
 test("segmentation rejects empty ink and isolated noise", () => {
   assert.equal(segmentDigits({ data: new Uint8Array(100), width: 10, height: 10, foregroundPixels: 0 }).status, "empty");
   const rgba = new Uint8ClampedArray(10 * 10 * 4);
@@ -148,6 +181,16 @@ test("normalization creates centered 28x28 float input", () => {
   assert.equal(normalized.length, 784);
   assert.ok(normalized.some(value => value === 1));
   for (let x = 0; x < 28; x++) assert.equal(normalized[x], 0);
+});
+
+test("normalization keeps grayscale stroke intensity", () => {
+  const mask = scoreMask("0");
+  mask.intensity = Float32Array.from(mask.data, value => value ? .5 : 0);
+  const box = segmentDigits(mask).digits[0];
+  const normalized = normalizeDigit28(mask, box);
+  const maximum = Math.max(...normalized);
+  assert.ok(maximum >= .49 && maximum <= .51);
+  assert.ok(normalized.some(value => value > 0 && value < 1));
 });
 
 test("normalization provides translation and stroke-width TTA variants", () => {

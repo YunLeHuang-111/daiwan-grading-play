@@ -27,6 +27,53 @@
     return { stage, code, ...details };
   }
 
+  async function inferSegmented(session, segmented) {
+    const probabilitySets = [];
+    for (const digit of segmented.digits.slice(0, 2)) {
+      const variants = root.ScoreRoi.normalizeDigitVariants(segmented.mask, digit);
+      const probabilities = new Float32Array(10);
+      const votes = new Uint8Array(10);
+      for (const values of variants) {
+        const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
+        const output = await session.run({ [session.inputNames[0]]: tensor });
+        const variantProbabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
+        variantProbabilities.forEach((value, index) => { probabilities[index] += value / variants.length; });
+        let winner = 0;
+        for (let index = 1; index < variantProbabilities.length; index++) {
+          if (variantProbabilities[index] > variantProbabilities[winner]) winner = index;
+        }
+        votes[winner]++;
+      }
+      probabilitySets.push({ probabilities, votes, variantCount: variants.length });
+    }
+    const decoded = root.ScoreRoi.decodeRoundedScore(probabilitySets, segmented.digits.length, {
+      confidenceThreshold: .6,
+      marginThreshold: .08,
+      consensusThreshold: 2 / 3,
+      consensusConfidenceThreshold: .25,
+      consensusVoteMarginThreshold: 1 / 3,
+    });
+    const leading = decoded.digits?.[0];
+    const ignoredRatio = (segmented.ignoredPixels || 0) / Math.max(1, segmented.mask.foregroundPixels);
+    const quality = (decoded.status === "ok" ? 2 : 0) + (decoded.confidence || 0) +
+      (leading?.voteRatio || 0) * .25 + Math.max(0, leading?.margin || 0) * .1 - ignoredRatio;
+    return { decoded, leading, quality };
+  }
+
+  function candidateSummary(segmented, evaluated) {
+    return {
+      strategy: segmented.strategy || "default",
+      status: evaluated.decoded.status,
+      score: evaluated.decoded.score,
+      rawText: evaluated.decoded.rawText,
+      segmentCount: segmented.digits.length,
+      leadingDigit: evaluated.decoded.leadingDigit,
+      confidence: evaluated.decoded.confidence,
+      voteRatio: evaluated.leading?.voteRatio || 0,
+      quality: evaluated.quality,
+    };
+  }
+
   async function recognizeCapture(captured) {
     if (captured.status !== "ok" || !captured.mask) {
       return {
@@ -35,15 +82,17 @@
       };
     }
     let segmented;
+    let candidates;
     try {
       segmented = root.ScoreRoi.segmentDigits(captured.mask);
+      candidates = root.ScoreRoi.segmentDigitCandidates(captured.mask);
     } catch (error) {
       return {
         status: "processing_error", score: null, rawText: "", confidence: 0, error: error.message,
         diagnostic: diagnostic("segmentation", "processing_error", { error: error.message }),
       };
     }
-    if (segmented.status !== "ok") {
+    if (!candidates.length) {
       return {
         status: segmented.status, score: null, rawText: "", confidence: 0,
         diagnostic: diagnostic("segmentation", segmented.status === "empty" ? "no_valid_segments" : "unstable_segments", {
@@ -63,38 +112,24 @@
     }
 
     try {
-      const probabilitySets = [];
-      for (const digit of segmented.digits.slice(0, 2)) {
-        const variants = root.ScoreRoi.normalizeDigitVariants(segmented.mask, digit);
-        const probabilities = new Float32Array(10);
-        const votes = new Uint8Array(10);
-        for (const values of variants) {
-          const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
-          const output = await session.run({ [session.inputNames[0]]: tensor });
-          const variantProbabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
-          variantProbabilities.forEach((value, index) => { probabilities[index] += value / variants.length; });
-          let winner = 0;
-          for (let index = 1; index < variantProbabilities.length; index++) {
-            if (variantProbabilities[index] > variantProbabilities[winner]) winner = index;
-          }
-          votes[winner]++;
+      const attempts = [];
+      const primary = await inferSegmented(session, candidates[0]);
+      attempts.push({ segmented: candidates[0], evaluated: primary });
+      if (primary.decoded.status !== "ok") {
+        for (const candidate of candidates.slice(1)) {
+          attempts.push({ segmented: candidate, evaluated: await inferSegmented(session, candidate) });
         }
-        probabilitySets.push({ probabilities, votes, variantCount: variants.length });
       }
-      const decoded = root.ScoreRoi.decodeRoundedScore(probabilitySets, segmented.digits.length, {
-        confidenceThreshold: .6,
-        marginThreshold: .08,
-        consensusThreshold: 2 / 3,
-        consensusConfidenceThreshold: .25,
-        consensusVoteMarginThreshold: 1 / 3,
-      });
-      const leading = decoded.digits?.[0];
+      const successful = attempts.filter(attempt => attempt.evaluated.decoded.status === "ok");
+      const chosen = (successful.length ? successful : attempts)
+        .slice().sort((a, b) => b.evaluated.quality - a.evaluated.quality)[0];
+      const { decoded, leading } = chosen.evaluated;
       return {
         ...decoded,
         bounds: captured.bounds,
         diagnostic: diagnostic("decoding", decoded.status, {
-          segmentCount: segmented.digits.length,
-          ignoredPixels: segmented.ignoredPixels ?? 0,
+          segmentCount: chosen.segmented.digits.length,
+          ignoredPixels: chosen.segmented.ignoredPixels ?? 0,
           rawText: decoded.rawText,
           leadingDigit: decoded.leadingDigit,
           confidence: decoded.confidence,
@@ -102,13 +137,16 @@
           voteRatio: leading?.voteRatio ?? 0,
           voteMargin: leading?.voteMargin ?? 0,
           votes: leading?.votes ?? [],
+          candidateCount: candidates.length,
+          chosenStrategy: chosen.segmented.strategy || "default",
+          candidateAttempts: attempts.map(attempt => candidateSummary(attempt.segmented, attempt.evaluated)),
         }),
       };
     } catch (error) {
       return {
         status: "inference_error", score: null, rawText: "", confidence: 0, error: error.message,
         diagnostic: diagnostic("inference", "runtime_error", {
-          segmentCount: segmented.digits.length,
+          segmentCount: candidates[0]?.digits.length ?? segmented.digits?.length ?? 0,
           error: error.message,
         }),
       };

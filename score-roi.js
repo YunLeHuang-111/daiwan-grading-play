@@ -33,14 +33,17 @@
 
   function maskFromRgba(rgba, width, height, alphaThreshold = 18) {
     const data = new Uint8Array(width * height);
+    const intensity = new Float32Array(width * height);
     let foregroundPixels = 0;
     for (let index = 0; index < data.length; index++) {
-      if (rgba[index * 4 + 3] >= alphaThreshold) {
+      const alpha = rgba[index * 4 + 3];
+      if (alpha >= alphaThreshold) {
         data[index] = 1;
+        intensity[index] = alpha / 255;
         foregroundPixels++;
       }
     }
-    return { data, width, height, foregroundPixels };
+    return { data, intensity, width, height, foregroundPixels };
   }
 
   function extractScoreInk({ inkCanvas, scoreZone, paddingCss = 3, alphaThreshold = 18 }) {
@@ -119,13 +122,17 @@
 
   function removeComponentNoise(mask, minimumPixels) {
     const data = new Uint8Array(mask.data.length);
+    const intensity = mask.intensity ? new Float32Array(mask.data.length) : null;
     let foregroundPixels = 0;
     const components = connectedComponents(mask).filter(component => component.pixels >= minimumPixels);
     for (const component of components) {
-      for (const index of component.indices) data[index] = 1;
+      for (const index of component.indices) {
+        data[index] = 1;
+        if (intensity) intensity[index] = mask.intensity[index];
+      }
       foregroundPixels += component.pixels;
     }
-    return { data, width: mask.width, height: mask.height, foregroundPixels, components };
+    return { data, intensity, width: mask.width, height: mask.height, foregroundPixels, components };
   }
 
   function projectionRuns(mask, box) {
@@ -163,9 +170,12 @@
     return bottom < top ? null : { left, top, right, bottom, width: right - left + 1, height: bottom - top + 1, pixels };
   }
 
-  function splitWideRun(mask, run, overallHeight, depth = 0) {
+  function splitWideRun(mask, run, overallHeight, options = {}, depth = 0) {
+    const splitWidthRatio = options.splitWidthRatio ?? .82;
+    const valleyRatio = options.valleyRatio ?? .45;
+    const maxSplitDepth = options.maxSplitDepth ?? 2;
     const width = run.right - run.left + 1;
-    if (depth >= 2 || width < overallHeight * .82) return [run];
+    if (depth >= maxSplitDepth || width < overallHeight * splitWidthRatio) return [run];
     const columnCounts = [];
     for (let x = run.left; x <= run.right; x++) {
       let count = 0;
@@ -183,12 +193,12 @@
       }
     }
     const peak = Math.max(...columnCounts, 1);
-    if (best < 0 || bestCount > peak * .45) return [run];
+    if (best < 0 || bestCount > peak * valleyRatio) return [run];
     const parts = [
       { left: run.left, right: run.left + best - 1 },
       { left: run.left + best + 1, right: run.right },
     ].filter(part => part.right >= part.left);
-    return parts.flatMap(part => splitWideRun(mask, part, overallHeight, depth + 1));
+    return parts.flatMap(part => splitWideRun(mask, part, overallHeight, options, depth + 1));
   }
 
   function segmentDigits(mask, options = {}) {
@@ -199,7 +209,9 @@
     const { runs } = projectionRuns(cleaned, box);
     if (!runs.length) return { status: "empty", digits: [] };
 
-    const mergeGap = Math.max(1, Math.round(box.height * .07));
+    const mergeGapRatio = options.mergeGapRatio ?? .07;
+    const mergeNarrowRatio = options.mergeNarrowRatio ?? .32;
+    const mergeGap = Math.max(0, Math.round(box.height * mergeGapRatio));
     const merged = [];
     for (const run of runs) {
       const previous = merged.at(-1);
@@ -207,13 +219,13 @@
       const currentBox = boxForColumns(cleaned, run.left, run.right);
       const fullHeightPair = previousBox && currentBox &&
         previousBox.height >= box.height * .55 && currentBox.height >= box.height * .55;
-      if (previous && !fullHeightPair && run.left - previous.right - 1 <= mergeGap && previous.right - previous.left + 1 < box.height * .32) {
+      if (previous && !fullHeightPair && run.left - previous.right - 1 <= mergeGap && previous.right - previous.left + 1 < box.height * mergeNarrowRatio) {
         previous.right = run.right;
       } else {
         merged.push({ ...run });
       }
     }
-    const split = merged.flatMap(run => splitWideRun(cleaned, run, box.height));
+    const split = merged.flatMap(run => splitWideRun(cleaned, run, box.height, options));
     const digits = split.map(run => boxForColumns(cleaned, run.left, run.right)).filter(Boolean);
     const substantial = digits.filter(digit => digit.pixels >= minimumPixels && digit.height >= Math.max(4, box.height * .35));
     if (!substantial.length) return { status: "empty", digits: [] };
@@ -226,24 +238,46 @@
     return { status: "ok", digits: substantial.sort((a, b) => a.left - b.left), box, mask: cleaned, ignoredPixels };
   }
 
+  function segmentDigitCandidates(mask) {
+    const presets = [
+      { strategy: "default" },
+      { strategy: "no-merge", mergeGapRatio: 0 },
+      { strategy: "aggressive-split", mergeGapRatio: .04, splitWidthRatio: .68, valleyRatio: .58 },
+      { strategy: "conservative-split", mergeGapRatio: .03, splitWidthRatio: .96, valleyRatio: .32, maxSplitDepth: 1 },
+    ];
+    const candidates = [];
+    const signatures = new Set();
+    for (const preset of presets) {
+      const result = segmentDigits(mask, preset);
+      if (result.status !== "ok" || result.digits.length < 1 || result.digits.length > 3) continue;
+      const signature = result.digits.map(digit => `${digit.left}:${digit.right}:${digit.top}:${digit.bottom}`).join("|");
+      if (signatures.has(signature)) continue;
+      signatures.add(signature);
+      candidates.push({ ...result, strategy: preset.strategy });
+    }
+    return candidates;
+  }
+
   function normalizeDigit28(mask, box) {
     const scale = Math.min(20 / box.width, 20 / box.height);
     const targetWidth = Math.max(1, Math.round(box.width * scale));
     const targetHeight = Math.max(1, Math.round(box.height * scale));
     const resized = new Float32Array(targetWidth * targetHeight);
+    const source = mask.intensity || mask.data;
+    const sourceValue = (x, y) => source[y * mask.width + x] || 0;
     for (let ty = 0; ty < targetHeight; ty++) {
       for (let tx = 0; tx < targetWidth; tx++) {
-        const sourceLeft = box.left + Math.floor(tx * box.width / targetWidth);
-        const sourceRight = box.left + Math.ceil((tx + 1) * box.width / targetWidth);
-        const sourceTop = box.top + Math.floor(ty * box.height / targetHeight);
-        const sourceBottom = box.top + Math.ceil((ty + 1) * box.height / targetHeight);
-        let maximum = 0;
-        for (let sy = sourceTop; sy < sourceBottom && !maximum; sy++) {
-          for (let sx = sourceLeft; sx < sourceRight; sx++) {
-            if (mask.data[sy * mask.width + sx]) { maximum = 1; break; }
-          }
-        }
-        resized[ty * targetWidth + tx] = maximum;
+        const sx = box.left + (tx + .5) * box.width / targetWidth - .5;
+        const sy = box.top + (ty + .5) * box.height / targetHeight - .5;
+        const x0 = clamp(Math.floor(sx), box.left, box.right);
+        const y0 = clamp(Math.floor(sy), box.top, box.bottom);
+        const x1 = clamp(x0 + 1, box.left, box.right);
+        const y1 = clamp(y0 + 1, box.top, box.bottom);
+        const fx = clamp(sx - Math.floor(sx), 0, 1);
+        const fy = clamp(sy - Math.floor(sy), 0, 1);
+        const top = sourceValue(x0, y0) * (1 - fx) + sourceValue(x1, y0) * fx;
+        const bottom = sourceValue(x0, y1) * (1 - fx) + sourceValue(x1, y1) * fx;
+        resized[ty * targetWidth + tx] = top * (1 - fy) + bottom * fy;
       }
     }
     let mass = 0;
@@ -385,6 +419,7 @@
     connectedComponents,
     removeComponentNoise,
     segmentDigits,
+    segmentDigitCandidates,
     normalizeDigit28,
     normalizeDigitVariants,
     transformDigit28,

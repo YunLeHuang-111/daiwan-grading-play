@@ -302,7 +302,8 @@ function recognitionFailureReason(result) {
     const receivedVotes = Number.isInteger(info.leadingDigit) ? votes[info.leadingDigit] || 0 : 0;
     const totalVotes = votes.reduce((sum, vote) => sum + vote, 0);
     const margin = Math.round((info.margin || 0) * 100);
-    return `十位數候選 ${info.leadingDigit ?? "—"} 信心不足（平均 ${percent}%、TTA ${receivedVotes}/${totalVotes || 6} 票、機率差 ${margin}%）`;
+    const candidates = info.candidateCount > 1 ? `、已比較 ${info.candidateCount} 組切割，最佳策略 ${info.chosenStrategy}` : "";
+    return `十位數候選 ${info.leadingDigit ?? "—"} 信心不足（平均 ${percent}%、TTA ${receivedVotes}/${totalVotes || 6} 票、機率差 ${margin}%${candidates}）`;
   }
   if (result?.status === "invalid") {
     return info.rawText ? `辨識格式不合法（原始結果 ${info.rawText}、切割 ${info.segmentCount ?? 0} 段）` : "辨識出的分數格式不合法";
