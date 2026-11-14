@@ -412,7 +412,7 @@
     const stableConsensus = digits[0].voteRatio >= consensusThreshold &&
       confidence >= consensusConfidenceThreshold && digits[0].voteMargin >= consensusVoteMarginThreshold;
     if (!highConfidence && !stableConsensus) {
-      return { status: "low_confidence", score: null, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
+      return { status: "low_confidence", score: null, suggestedScore: score, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
     }
     return { status: "ok", score, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
   }

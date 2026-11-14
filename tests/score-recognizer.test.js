@@ -104,3 +104,89 @@ test("recognizer retries binary preprocessing after grayscale confidence is low"
   assert.equal(result.diagnostic.chosenStrategy, "default/binary");
   assert.deepEqual(result.diagnostic.candidateAttempts.map(attempt => attempt.preprocessing), ["grayscale", "binary"]);
 });
+
+test("recognizer accepts matching low-confidence results from independent preprocessing paths", async () => {
+  const candidate = {
+    strategy: "default",
+    digits: [{ marker: 1 }, { marker: 0 }],
+    mask: { foregroundPixels: 20 },
+    ignoredPixels: 0,
+  };
+  global.ScoreRoi = {
+    segmentDigits: () => candidate,
+    segmentDigitCandidates: () => [candidate],
+    normalizeDigitVariantSets: (_mask, digit) => ({
+      grayscale: [Float32Array.of(digit.marker)],
+      binary: [Float32Array.of(digit.marker)],
+    }),
+    softmax: values => values,
+    decodeRoundedScore: () => {
+      const digit = { value: 1, confidence: .29, margin: .01, voteRatio: .5, voteMargin: 0, votes: [0, 3] };
+      return { status: "low_confidence", score: null, suggestedScore: 10, rawText: "10", confidence: .29, leadingDigit: 1, digits: [digit] };
+    },
+  };
+  global.ort = {
+    env: { wasm: {} },
+    Tensor: class Tensor {
+      constructor(_type, data) { this.data = data; }
+    },
+    InferenceSession: {
+      create: async () => ({
+        inputNames: ["input"], outputNames: ["output"],
+        run: async () => ({ output: { data: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0] } }),
+      }),
+    },
+  };
+
+  delete require.cache[require.resolve("../score-recognizer.js")];
+  require("../score-recognizer.js");
+  const result = await global.scoreRecognizer.recognizeCapture({ status: "ok", mask: {}, bounds: { x: 0, y: 0, width: 10, height: 10 } });
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.score, 10);
+  assert.equal(result.recoveredByConsensus, true);
+  assert.equal(result.diagnostic.consensusSupport, 2);
+});
+
+test("recognizer rejects tied low-confidence score groups", async () => {
+  const candidates = [10, 20].map((score, index) => ({
+    strategy: index ? "no-merge" : "default",
+    digits: [{ marker: score }, { marker: 0 }],
+    mask: { foregroundPixels: 20 },
+    ignoredPixels: 0,
+  }));
+  global.ScoreRoi = {
+    segmentDigits: () => candidates[0],
+    segmentDigitCandidates: () => candidates,
+    normalizeDigitVariantSets: (_mask, digit) => ({
+      grayscale: [Float32Array.of(digit.marker)],
+      binary: [Float32Array.of(digit.marker)],
+    }),
+    softmax: values => values,
+    decodeRoundedScore: probabilitySets => {
+      const suggestedScore = probabilitySets[0].probabilities[0];
+      const digit = { value: suggestedScore / 10, confidence: .3, margin: .01, voteRatio: .5, voteMargin: 0, votes: [3] };
+      return { status: "low_confidence", score: null, suggestedScore, rawText: String(suggestedScore), confidence: .3, leadingDigit: digit.value, digits: [digit] };
+    },
+  };
+  global.ort = {
+    env: { wasm: {} },
+    Tensor: class Tensor {
+      constructor(_type, data) { this.data = data; }
+    },
+    InferenceSession: {
+      create: async () => ({
+        inputNames: ["input"], outputNames: ["output"],
+        run: async feeds => ({ output: { data: [feeds.input.data[0], 0, 0, 0, 0, 0, 0, 0, 0, 0] } }),
+      }),
+    },
+  };
+
+  delete require.cache[require.resolve("../score-recognizer.js")];
+  require("../score-recognizer.js");
+  const result = await global.scoreRecognizer.recognizeCapture({ status: "ok", mask: {}, bounds: { x: 0, y: 0, width: 10, height: 10 } });
+
+  assert.equal(result.status, "low_confidence");
+  assert.equal(result.diagnostic.recoveredByConsensus, false);
+  assert.equal(result.diagnostic.candidateAttempts.length, 4);
+});

@@ -291,7 +291,9 @@ test("decoder recognizes two digits and rounds the result down to tens", () => {
   assert.equal(decodeRoundedScore([prediction(6)], 1).status, "invalid");
   assert.equal(decodeRoundedScore([prediction(0), prediction(6)], 2).status, "invalid");
   assert.equal(decodeRoundedScore([prediction(8), prediction(0)], 4).status, "invalid");
-  assert.equal(decodeRoundedScore([prediction(8, .45), prediction(0)], 2).status, "low_confidence");
+  const lowConfidence = decodeRoundedScore([prediction(8, .45), prediction(0)], 2);
+  assert.equal(lowConfidence.status, "low_confidence");
+  assert.equal(lowConfidence.suggestedScore, 80);
   assert.equal(decodeRoundedScore([], 2).status, "invalid");
   assert.equal(isAllowedScore(NaN), false);
   assert.equal(isAllowedScore(85), false);

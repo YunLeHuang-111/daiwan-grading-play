@@ -68,12 +68,45 @@
       preprocessing,
       status: evaluated.decoded.status,
       score: evaluated.decoded.score,
+      suggestedScore: evaluated.decoded.suggestedScore,
       rawText: evaluated.decoded.rawText,
       segmentCount: segmented.digits.length,
       leadingDigit: evaluated.decoded.leadingDigit,
       confidence: evaluated.decoded.confidence,
       voteRatio: evaluated.leading?.voteRatio || 0,
       quality: evaluated.quality,
+    };
+  }
+
+  function consensusRecovery(attempts) {
+    const groups = new Map();
+    for (const attempt of attempts) {
+      const suggestedScore = attempt.evaluated.decoded.score ?? attempt.evaluated.decoded.suggestedScore;
+      if (suggestedScore == null) continue;
+      const group = groups.get(suggestedScore) || [];
+      group.push(attempt);
+      groups.set(suggestedScore, group);
+    }
+    const ranked = [...groups.entries()]
+      .map(([score, supporting]) => ({
+        score,
+        supporting,
+        averageConfidence: supporting.reduce((sum, attempt) => sum + (attempt.evaluated.decoded.confidence || 0), 0) / supporting.length,
+        averageQuality: supporting.reduce((sum, attempt) => sum + attempt.evaluated.quality, 0) / supporting.length,
+      }))
+      .sort((a, b) => b.supporting.length - a.supporting.length || b.averageQuality - a.averageQuality);
+    const winner = ranked[0];
+    const runnerUp = ranked[1];
+    if (!winner || winner.supporting.length < 2 || winner.averageConfidence < .18 ||
+      (runnerUp && runnerUp.supporting.length >= winner.supporting.length)) return null;
+    const chosen = winner.supporting.slice().sort((a, b) => b.evaluated.quality - a.evaluated.quality)[0];
+    return {
+      chosen,
+      score: winner.score,
+      support: winner.supporting.length,
+      competingScore: runnerUp?.score ?? null,
+      competingSupport: runnerUp?.supporting.length ?? 0,
+      averageConfidence: winner.averageConfidence,
     };
   }
 
@@ -131,9 +164,17 @@
         }
       }
       const successful = attempts.filter(attempt => attempt.evaluated.decoded.status === "ok");
-      const chosen = (successful.length ? successful : attempts)
+      const recovery = successful.length ? null : consensusRecovery(attempts);
+      const chosen = (successful.length ? successful : recovery ? [recovery.chosen] : attempts)
         .slice().sort((a, b) => b.evaluated.quality - a.evaluated.quality)[0];
-      const { decoded, leading } = chosen.evaluated;
+      const originalDecoded = chosen.evaluated.decoded;
+      const decoded = recovery ? {
+        ...originalDecoded,
+        status: "ok",
+        score: recovery.score,
+        recoveredByConsensus: true,
+      } : originalDecoded;
+      const { leading } = chosen.evaluated;
       return {
         ...decoded,
         bounds: captured.bounds,
@@ -150,6 +191,11 @@
           candidateCount: candidates.length,
           attemptCount: attempts.length,
           chosenStrategy: `${chosen.segmented.strategy || "default"}/${chosen.preprocessing}`,
+          recoveredByConsensus: Boolean(recovery),
+          consensusSupport: recovery?.support ?? 0,
+          competingScore: recovery?.competingScore ?? null,
+          competingSupport: recovery?.competingSupport ?? 0,
+          consensusAverageConfidence: recovery?.averageConfidence ?? 0,
           candidateAttempts: attempts.map(attempt => candidateSummary(attempt.segmented, attempt.evaluated, attempt.preprocessing)),
         }),
       };
