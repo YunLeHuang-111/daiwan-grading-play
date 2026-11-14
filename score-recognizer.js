@@ -34,16 +34,20 @@
     const segmented = root.ScoreRoi.segmentDigits(captured.mask);
     if (segmented.status !== "ok") return { status: segmented.status, score: null, rawText: "", confidence: 0 };
 
-    const variants = root.ScoreRoi.normalizeDigitVariants(segmented.mask, segmented.digits[0]);
-    const probabilities = new Float32Array(10);
-    for (const values of variants) {
-      const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
-      const output = await session.run({ [session.inputNames[0]]: tensor });
-      const variantProbabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
-      variantProbabilities.forEach((value, index) => { probabilities[index] += value / variants.length; });
+    const probabilitySets = [];
+    for (const digit of segmented.digits.slice(0, 2)) {
+      const variants = root.ScoreRoi.normalizeDigitVariants(segmented.mask, digit);
+      const probabilities = new Float32Array(10);
+      for (const values of variants) {
+        const tensor = new root.ort.Tensor("float32", values, [1, 1, 28, 28]);
+        const output = await session.run({ [session.inputNames[0]]: tensor });
+        const variantProbabilities = root.ScoreRoi.softmax(output[session.outputNames[0]].data);
+        variantProbabilities.forEach((value, index) => { probabilities[index] += value / variants.length; });
+      }
+      probabilitySets.push(probabilities);
     }
     return {
-      ...root.ScoreRoi.decodeLeadingDigitScore(probabilities, segmented.digits.length, {
+      ...root.ScoreRoi.decodeRoundedScore(probabilitySets, segmented.digits.length, {
         confidenceThreshold: .65,
         marginThreshold: .12,
       }),

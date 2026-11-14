@@ -213,8 +213,13 @@
     const digits = split.map(run => boxForColumns(cleaned, run.left, run.right)).filter(Boolean);
     const substantial = digits.filter(digit => digit.pixels >= minimumPixels && digit.height >= Math.max(4, box.height * .35));
     if (!substantial.length) return { status: "empty", digits: [] };
-    if (substantial.length > 3 || substantial.length !== digits.length) return { status: "low_confidence", digits: substantial };
-    return { status: "ok", digits: substantial.sort((a, b) => a.left - b.left), box, mask: cleaned };
+    const accepted = new Set(substantial);
+    const ignoredPixels = digits.reduce((total, digit) => total + (accepted.has(digit) ? 0 : digit.pixels), 0);
+    const ignoredPixelLimit = Math.max(minimumPixels, Math.round(cleaned.foregroundPixels * .08));
+    if (substantial.length > 3 || ignoredPixels > ignoredPixelLimit) {
+      return { status: "low_confidence", digits: substantial, ignoredPixels };
+    }
+    return { status: "ok", digits: substantial.sort((a, b) => a.left - b.left), box, mask: cleaned, ignoredPixels };
   }
 
   function normalizeDigit28(mask, box) {
@@ -301,30 +306,44 @@
     return exponentials.map(value => value / total);
   }
 
-  function decodeLeadingDigitScore(probabilities, digitCount, options = {}) {
-    const confidenceThreshold = options.confidenceThreshold ?? .72;
-    const marginThreshold = options.marginThreshold ?? .16;
-    if (!probabilities?.length || digitCount < 1 || digitCount > 3) {
-      return { status: "invalid", score: null, rawText: "", confidence: 0, digitCount };
-    }
+  function classifyDigit(probabilities) {
+    if (!probabilities || probabilities.length < 2) return null;
     const ranked = Array.from(probabilities, (probability, value) => ({ value, probability }))
       .sort((a, b) => b.probability - a.probability);
-    const leadingDigit = ranked[0].value;
-    const confidence = ranked[0].probability;
-    const margin = confidence - ranked[1].probability;
-    const rawText = `${leadingDigit}${"0".repeat(digitCount - 1)}`;
+    return {
+      value: ranked[0].value,
+      confidence: ranked[0].probability,
+      margin: ranked[0].probability - ranked[1].probability,
+      probabilities: Array.from(probabilities),
+    };
+  }
+
+  function decodeRoundedScore(probabilitySets, digitCount, options = {}) {
+    const confidenceThreshold = options.confidenceThreshold ?? .72;
+    const marginThreshold = options.marginThreshold ?? .16;
+    const requiredDigits = Math.min(digitCount, 2);
+    if (!Array.isArray(probabilitySets) || digitCount < 1 || digitCount > 3 || probabilitySets.length < requiredDigits) {
+      return { status: "invalid", score: null, rawText: "", confidence: 0, digitCount };
+    }
+    const digits = probabilitySets.slice(0, requiredDigits).map(classifyDigit);
+    if (digits.some(digit => !digit)) return { status: "invalid", score: null, rawText: "", confidence: 0, digitCount };
+
+    const leadingDigit = digits[0].value;
+    const confidence = digits[0].confidence;
+    const margin = digits[0].margin;
+    const rawText = digits.map(digit => digit.value).join("") + (digitCount > digits.length ? "…" : "");
+    const recognizedNumber = Number(digits.map(digit => digit.value).join(""));
     let score = null;
     if (digitCount === 1 && leadingDigit === 0) score = 0;
-    if (digitCount === 2 && leadingDigit >= 1) score = leadingDigit * 10;
+    if (digitCount >= 2 && leadingDigit >= 1) score = Math.trunc(recognizedNumber / 10) * 10;
     if (digitCount === 3 && leadingDigit === 1) score = 100;
-    const digit = { value: leadingDigit, confidence, margin, probabilities: Array.from(probabilities) };
-    if (score === null || !allowedScoreTexts.has(rawText)) {
-      return { status: "invalid", score: null, rawText, confidence, digitCount, leadingDigit, digits: [digit] };
+    if (score === null || !isAllowedScore(score)) {
+      return { status: "invalid", score: null, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
     }
     if (confidence < confidenceThreshold || margin < marginThreshold) {
-      return { status: "low_confidence", score: null, rawText, confidence, digitCount, leadingDigit, digits: [digit] };
+      return { status: "low_confidence", score: null, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
     }
-    return { status: "ok", score, rawText, confidence, digitCount, leadingDigit, digits: [digit] };
+    return { status: "ok", score, rawText, confidence, digitCount, leadingDigit, recognizedNumber, digits };
   }
 
   function isAllowedScore(value) {
@@ -349,7 +368,7 @@
     normalizeDigitVariants,
     transformDigit28,
     softmax,
-    decodeLeadingDigitScore,
+    decodeRoundedScore,
     isAllowedScore,
     isRecognitionCurrent,
   };

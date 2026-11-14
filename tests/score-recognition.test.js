@@ -10,7 +10,7 @@ const {
   normalizeDigit28,
   normalizeDigitVariants,
   softmax,
-  decodeLeadingDigitScore,
+  decodeRoundedScore,
   isAllowedScore,
   isRecognitionCurrent,
 } = require("../score-roi.js");
@@ -97,6 +97,19 @@ test("segmentation recursively separates a touching 100", () => {
   assert.equal(result.digits.length, 3);
 });
 
+test("segmentation ignores a small extra stroke after two valid digits", () => {
+  const mask = scoreMask("20");
+  for (let y = 10; y <= 12; y++) {
+    const index = y * mask.width + mask.width - 1;
+    mask.data[index] = 1;
+    mask.foregroundPixels++;
+  }
+  const result = segmentDigits(mask);
+  assert.equal(result.status, "ok");
+  assert.equal(result.digits.length, 2);
+  assert.equal(result.ignoredPixels, 3);
+});
+
 test("segmentation rejects empty ink and isolated noise", () => {
   assert.equal(segmentDigits({ data: new Uint8Array(100), width: 10, height: 10, foregroundPixels: 0 }).status, "empty");
   const rgba = new Uint8ClampedArray(10 * 10 * 4);
@@ -138,19 +151,37 @@ test("stable softmax handles very large logits", () => {
   assert.equal(probabilities.indexOf(Math.max(...probabilities)), 1);
 });
 
-test("decoder classifies only the leading digit and uses segment count for trailing zeros", () => {
+test("decoder recognizes two digits and rounds the result down to tens", () => {
   for (const text of ["0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]) {
-    const result = decodeLeadingDigitScore(prediction(Number(text[0])), text.length);
+    const result = decodeRoundedScore([...text].slice(0, 2).map(digit => prediction(Number(digit))), text.length);
     assert.equal(result.status, "ok", text);
     assert.equal(result.score, Number(text), text);
-    assert.equal(result.digits.length, 1, text);
+    assert.equal(result.digits.length, Math.min(text.length, 2), text);
   }
-  assert.equal(decodeLeadingDigitScore(prediction(6), 1).status, "invalid");
-  assert.equal(decodeLeadingDigitScore(prediction(0), 2).status, "invalid");
-  assert.equal(decodeLeadingDigitScore(prediction(2), 3).status, "invalid");
-  assert.equal(decodeLeadingDigitScore(prediction(8), 4).status, "invalid");
-  assert.equal(decodeLeadingDigitScore(prediction(8, .45), 2).status, "low_confidence");
-  assert.equal(decodeLeadingDigitScore([], 2).status, "invalid");
+  const misreadOnes = decodeRoundedScore([prediction(2), prediction(6)], 2);
+  assert.equal(misreadOnes.status, "ok");
+  assert.equal(misreadOnes.recognizedNumber, 26);
+  assert.equal(misreadOnes.score, 20);
+  assert.equal(misreadOnes.rawText, "26");
+
+  const extraSegment = decodeRoundedScore([prediction(2), prediction(6)], 3);
+  assert.equal(extraSegment.status, "ok");
+  assert.equal(extraSegment.score, 20);
+  assert.equal(extraSegment.rawText, "26…");
+
+  const misreadHundredsZero = decodeRoundedScore([prediction(1), prediction(6)], 3);
+  assert.equal(misreadHundredsZero.status, "ok");
+  assert.equal(misreadHundredsZero.score, 100);
+
+  const noisyOnes = decodeRoundedScore([prediction(6), prediction(9, .3)], 2);
+  assert.equal(noisyOnes.status, "ok");
+  assert.equal(noisyOnes.score, 60);
+
+  assert.equal(decodeRoundedScore([prediction(6)], 1).status, "invalid");
+  assert.equal(decodeRoundedScore([prediction(0), prediction(6)], 2).status, "invalid");
+  assert.equal(decodeRoundedScore([prediction(8), prediction(0)], 4).status, "invalid");
+  assert.equal(decodeRoundedScore([prediction(8, .45), prediction(0)], 2).status, "low_confidence");
+  assert.equal(decodeRoundedScore([], 2).status, "invalid");
   assert.equal(isAllowedScore(NaN), false);
   assert.equal(isAllowedScore(85), false);
   assert.equal(isAllowedScore(100), true);
