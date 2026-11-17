@@ -425,6 +425,7 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
 .phone-layout .recognition-controls { grid-column: 1 / -1; grid-row: 1; padding: 3px 5px; }
 .phone-layout .recognition-heading { font-size: .66rem; }
 .phone-layout #recognition-status { margin-block: 2px; font-size: .66rem; }
+.phone-layout #rewrite-score { min-height: 30px; padding: 2px 6px; font-size: .72rem; }
 
 .phone-layout .score-controls { grid-column: 1; grid-row: 2; display: flex; align-items: center; justify-content: flex-start; gap: 4px; }
 .phone-layout #score-source { margin: 0; font-size: .58rem; }
