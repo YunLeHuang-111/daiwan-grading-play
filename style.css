@@ -456,3 +456,27 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
   min-height: 0; padding: 5px 0; margin: 0; border-top: 1px solid #e8e0d3;
 }
 .answer-paper .question-text { display: block; }
+
+#score-buttons {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+}
+#score-buttons button {
+  min-height: 38px;
+  padding: 2px;
+  border: 1px solid #d2ab7e;
+  border-radius: 6px;
+  background: #ffe5b7;
+  color: #533823;
+  font-weight: 800;
+}
+#score-buttons button[aria-pressed="true"] {
+  background: #a63d36;
+  border-color: #87322d;
+  color: #fff;
+}
