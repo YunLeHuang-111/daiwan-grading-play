@@ -571,7 +571,8 @@ function fitPhonePaper() {
   // Measure the paper before its visual transform so fitting cannot change line wraps.
   const paperHeight = studentPaper.offsetHeight;
   if (!paperHeight) return;
-  const scale = Math.min(1, Math.max(.4, available / paperHeight));
+  // Allow vertical scrolling when fitting the entire sheet would make it too small to read.
+  const scale = Math.min(1, Math.max(.75, (available / paperHeight) * 1.15));
   sheet.style.setProperty("--phone-paper-height", `${Math.ceil(paperHeight * scale)}px`);
   if (sheet.style.getPropertyValue("--phone-paper-scale") !== String(scale)) {
     sheet.style.setProperty("--phone-paper-scale", scale);
