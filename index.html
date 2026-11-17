@@ -22,7 +22,7 @@
   <script src="./score-recognizer.js?v=score-cnn-13" defer></script>
   <script src="./achievements.js?v=three-modes" defer></script>
   <script src="./browser-game.js?v=confirm-score-1" defer></script>
-  <script src="./game.js?v=confirm-score-1" defer></script>
+  <script src="./game.js?v=auto-score-1" defer></script>
 </head>
 <body>
   <main class="desk" id="game-page">
@@ -78,9 +78,8 @@
             <strong>手寫 CNN 辨識</strong>
             <span id="model-status" class="model-status" aria-live="polite">模型載入中…</span>
           </div>
-          <p id="recognition-status" aria-live="polite">請點選分數或辨識手寫分數。</p>
+          <p id="recognition-status" aria-live="polite">請直接選分，或手寫總分，停筆後會自動辨識。</p>
           <div class="recognition-actions">
-            <button type="button" id="recognize-score" class="desk-button" disabled>辨識手寫分數</button>
             <button type="button" id="rewrite-score" class="desk-button" disabled>重新寫分數</button>
           </div>
           <fieldset id="score-buttons" class="keypad" disabled>
@@ -169,7 +168,7 @@
     <ol class="tutorial-steps">
       <li><strong>對答案</strong><span>按題號比對標準答案的紅字與學生作答的藍字。多科和練習模式交卷後會換科。</span></li>
       <li><strong>畫紅筆</strong><span>在學生的作答上畫記，畫錯了可以用橡皮擦。</span></li>
-      <li><strong>給分交卷</strong><span>每題 10 分。可直接點選總分，或在考卷右上角手寫總分，再點「辨識手寫分數」。確認「送出分數」後，按「下一張」交卷。</span></li>
+      <li><strong>給分交卷</strong><span>每題 10 分。在考卷右上角手寫總分，停筆後會自動辨識。若辨識有誤，可點選正確分數。確認「送出分數」後，按「下一張」交卷。</span></li>
     </ol>
     <p class="tutorial-modes">單科 1 分鐘，多科 2 分鐘且每張換科，練習不限時且每張換科。若畫面放大，用兩指向內捏合即可縮回。</p>
     <form method="dialog" class="tutorial-actions">
