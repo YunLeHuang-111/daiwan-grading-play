@@ -769,7 +769,7 @@ function scheduleScoreRecognition() {
   recognitionTimer = setTimeout(() => {
     if (activeStroke) scheduleScoreRecognition();
     else recognizeCurrentScore();
-  }, 550);
+  }, 300);
 }
 
 function beginStroke(event, capture = true) {

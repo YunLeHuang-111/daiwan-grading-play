@@ -171,8 +171,9 @@ progress::-moz-progress-bar { background: #683b38; }
 .model-status.ready { color: #2e6654; }
 .model-status.unavailable { color: #8b322e; }
 #recognition-status { min-height: 1.35em; margin: 3px 0 5px; color: #654b37; font-size: .76rem; }
-.recognition-actions { display: flex; flex-wrap: wrap; gap: 4px; }
-.recognition-actions button { min-height: 32px; padding: 3px 7px; }
+.recognition-actions { display: flex; align-items: center; gap: 8px; }
+.recognition-actions p { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.recognition-actions button { flex: none; min-height: 44px; padding: 5px 10px; font-size: .88rem; white-space: nowrap; }
 #submit {
   min-height: 60px; padding-inline: 7px; font-size: 1.13rem; background: #a63d36; border-color: #87322d;
   box-shadow: 0 2px 0 #87322d;
@@ -424,7 +425,7 @@ dialog h2 { color: var(--green); margin: 8px 0 0; }
 .phone-layout .recognition-controls { grid-column: 1 / -1; grid-row: 1; padding: 3px 5px; }
 .phone-layout .recognition-heading { font-size: .66rem; }
 .phone-layout #recognition-status { margin-block: 2px; font-size: .66rem; }
-.phone-layout .recognition-actions button { min-height: 25px; padding: 1px 4px; font-size: .64rem; }
+
 .phone-layout .score-controls { grid-column: 1; grid-row: 2; display: flex; align-items: center; justify-content: flex-start; gap: 4px; }
 .phone-layout #score-source { margin: 0; font-size: .58rem; }
 .phone-layout .calculator-label { max-width: none; font-size: .65rem; line-height: 1.12; }
