@@ -63,6 +63,23 @@ const browserGame = (() => {
     return { number, name: names[(number - 1) % names.length], answers };
   }
 
+  function expectedScore() {
+    return 10 * round.paper.answers.filter((answer, index) => answer === round.key[index]).length;
+  }
+
+  function advancePaper(entered) {
+    round.grades.push({ number: round.paper.number, entered, expected: expectedScore() });
+    if (round.mode !== "timed" && banks.length > 1) {
+      selectBank(pick(banks.filter(bank => bank.subject !== round.subject)));
+    }
+    round.paper = nextPaper();
+    return { count: round.grades.length, ...exam() };
+  }
+
+  function isAllowedScore(value) {
+    return Number.isInteger(value) && value >= 0 && value <= 100 && value % 10 === 0;
+  }
+
   function results() {
     const grades = round.grades.slice();
     const count = grades.length;
@@ -104,21 +121,58 @@ const browserGame = (() => {
       return results();
     }
     if (action === "results") {
-      if (round.finished || remainingMs === 0) return results();
+      if (round.finished) return results();
+      if (remainingMs === 0) return { recognitionRequired: true };
       if (round.practice) throw new Error("請先結束練習");
       return { remainingMs };
     }
+
+    if (action === "defer" && method === "POST") {
+      if (round.practice) throw new Error("練習模式必須立即辨識分數。");
+      if (!/^[1-9][0-9]*$/.test(body)) throw new Error("考卷編號格式錯誤。");
+      if (round.finished || remainingMs === 0) return { finished: true };
+      const number = Number(body);
+      if (number !== round.paper.number) throw new Error("這張考卷已交件，請重新開始。");
+      return { remainingMs, ...advancePaper(null) };
+    }
+
+    if (action === "recognize" && method === "POST") {
+      if (round.practice) throw new Error("練習模式不使用批次辨識。");
+      if (round.finished) return results();
+      let recognized;
+      try { recognized = JSON.parse(body); } catch { throw new Error("批次辨識資料格式錯誤。"); }
+      if (!Array.isArray(recognized)) throw new Error("批次辨識資料格式錯誤。");
+      const scores = new Map();
+      for (const item of recognized) {
+        const validFailureReason = item?.failureReason == null ||
+          (typeof item.failureReason === "string" && item.failureReason.length > 0 && item.failureReason.length <= 300);
+        if (!item || !Number.isInteger(item.number) || (item.score !== null && !isAllowedScore(item.score)) ||
+          !validFailureReason || scores.has(item.number)) {
+          throw new Error("批次辨識分數不合法。");
+        }
+        scores.set(item.number, { score: item.score, failureReason: item.score === null ? item.failureReason || "未提供診斷" : null });
+      }
+      const pending = round.grades.filter(grade => grade.entered === null);
+      if (scores.size !== pending.length || pending.some(grade => !scores.has(grade.number))) {
+        throw new Error("批次辨識考卷數量不符。");
+      }
+      for (const grade of pending) {
+        const recognizedPaper = scores.get(grade.number);
+        grade.entered = recognizedPaper.score;
+        grade.failureReason = recognizedPaper.failureReason;
+      }
+      round.finished = true;
+      return results();
+    }
+
     if (action !== "submit" || method !== "POST") throw new Error("找不到此操作。");
-    if (!/^[1-9][0-9]*,(?:100|[0-9]{1,2})$/.test(body)) throw new Error("請填入 0 到 100 的整數。");
+    if (!round.practice) throw new Error("計時模式會在結束後統一辨識。");
+    if (!/^[1-9][0-9]*,(?:100|[1-9]0|0)$/.test(body)) throw new Error("請填入 0 到 100、10 的倍數分數。");
     if (round.finished || remainingMs === 0) return { finished: true, result: results() };
     const [number, entered] = body.split(",").map(Number);
     if (number !== round.paper.number) throw new Error("這張考卷已交件，請重新開始。");
-    const expected = 10 * round.paper.answers.filter((answer, index) => answer === round.key[index]).length;
-    round.grades.push({ number, entered, expected });
-    if (round.mode !== "timed" && banks.length > 1) {
-      selectBank(pick(banks.filter(bank => bank.subject !== round.subject)));
-    }
-    round.paper = nextPaper();
-    return { remainingMs, count: round.grades.length, ...exam() };
+    return { remainingMs, ...advancePaper(entered) };
   };
 })();
+
+if (typeof module === "object" && module.exports) module.exports = browserGame;
