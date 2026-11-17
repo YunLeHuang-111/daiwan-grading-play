@@ -34,7 +34,7 @@ let activePointer;
 let stylusTouchId = null;
 let tool = "pen";
 const practiceFinish = get("finish-practice");
-const recognizeScore = get("recognize-score");
+let recognitionTimer;
 const scoreButtons = get("score-buttons");
 let manualScore = false;
 const reviewedPapers = new Map();
@@ -71,14 +71,16 @@ function setRecognitionStatus(text) {
 }
 
 function resetScoreRecognition(text) {
+  clearTimeout(recognitionTimer);
   recognitionRequest++;
   recognitionPending = false;
   scoreInkRevision++;
   setGrade(null);
-  setRecognitionStatus(text || "請點選分數，或手寫後點「辨識手寫分數」。");
+  setRecognitionStatus(text || "請直接選分，或在右上角手寫分數，停筆後會自動辨識。");
 }
 
-function invalidateScoreRecognition(text = "筆跡已更新，請重新辨識分數。") {
+function invalidateScoreRecognition(text = "停筆後會自動辨識分數。") {
+  clearTimeout(recognitionTimer);
   recognitionRequest++;
   recognitionPending = false;
   scoreInkRevision++;
@@ -219,7 +221,6 @@ function updateControls() {
   submit.disabled = !editable || recognitionPending;
   rewriteScore.disabled = !editable;
   practiceFinish.disabled = !editable;
-  recognizeScore.disabled = !editable || recognitionPending || !modelAvailable;
   scoreButtons.disabled = !editable;
   get("undo").disabled = !editable || strokes.length === 0;
   get("clear").disabled = !editable || strokes.length === 0;
@@ -364,7 +365,7 @@ get("grade-form").addEventListener("submit", async event => {
   }
   const score = selectedScore;
   if (score === null) {
-    message("請先點選或辨識分數，確認後再交卷。");
+    message("請先選分，或等待手寫分數自動辨識。");
     return;
   }
 
@@ -748,7 +749,27 @@ document.addEventListener("selectionchange", clearPageSelection);
 function appendInkPoint(event, box) {
   const [x, y] = point(event, box);
   const [lastX, lastY] = activeStroke.points[activeStroke.points.length - 1];
-  if (x !== lastX || y !== lastY) activeStroke.points.push([x, y]);
+  if (x !== lastX || y !== lastY) {
+    activeStroke.points.push([x, y]);
+    markScoreInk([x, y]);
+  }
+}
+
+function markScoreInk([x, y]) {
+  if (activeStroke.touchesScore) return;
+  const zone = scoreZoneInInkCoordinates();
+  if (x < zone.left || x > zone.right || y < zone.top || y > zone.bottom) return;
+  activeStroke.touchesScore = true;
+  invalidateScoreRecognition();
+}
+
+function scheduleScoreRecognition() {
+  clearTimeout(recognitionTimer);
+  if (manualScore || phase !== "playing") return;
+  recognitionTimer = setTimeout(() => {
+    if (activeStroke) scheduleScoreRecognition();
+    else recognizeCurrentScore();
+  }, 550);
 }
 
 function beginStroke(event, capture = true) {
@@ -770,7 +791,7 @@ function beginStroke(event, capture = true) {
   activePointer = event.pointerId;
   activeStroke = { points: [point(event)], tool, pointerType: event.pointerType };
   strokes.push(activeStroke);
-  invalidateScoreRecognition();
+  markScoreInk(activeStroke.points[0]);
   if (capture) {
     try {
       ink.setPointerCapture(event.pointerId);
@@ -816,6 +837,7 @@ function finishStroke(event) {
     appendInkPoint(event, box);
     if (activeStroke.points.length > start + 1) paintInk(activeStroke, box, start);
   }
+  if (activeStroke.touchesScore) scheduleScoreRecognition();
   activeStroke = undefined;
   activePointer = undefined;
 }
@@ -860,6 +882,7 @@ function updateStylusTouch(event) {
     if (activeStroke.points.length > start + 1) paintInk(activeStroke, box, start);
   }
   if (event.type !== "touchmove") {
+    if (activeStroke?.touchesScore) scheduleScoreRecognition();
     stylusTouchId = null;
     activeStroke = undefined;
     activePointer = undefined;
@@ -884,9 +907,12 @@ get("undo").addEventListener("click", () => {
   activeStroke = undefined;
   activePointer = undefined;
   stylusTouchId = null;
-  strokes.pop();
+  const removed = strokes.pop();
   redrawInk();
-  invalidateScoreRecognition("已復原筆跡，請重新辨識分數。");
+  if (removed?.touchesScore) {
+    invalidateScoreRecognition("已復原筆跡，正在等待重新辨識。");
+    scheduleScoreRecognition();
+  }
   updateControls();
 });
 get("clear").addEventListener("click", clearInk);
@@ -945,10 +971,10 @@ for (const button of layoutButtons) {
 }
 setLayout(matchMedia("(max-width: 680px), (max-height: 500px) and (pointer: coarse)").matches);
 rewriteScore.addEventListener("click", clearScoreInk);
-recognizeScore.addEventListener("click", recognizeCurrentScore);
 scoreButtons.addEventListener("click", event => {
   const button = event.target.closest("[data-score]");
   if (!button || phase !== "playing") return;
+  clearTimeout(recognitionTimer);
   recognitionRequest++;
   recognitionPending = false;
   setGrade(Number(button.dataset.score), true);
