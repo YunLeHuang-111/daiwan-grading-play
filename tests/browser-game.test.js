@@ -42,3 +42,21 @@ test("practice mode still recognizes and submits each paper immediately", async 
   assert.equal(submitted.count, 1);
   assert.equal(submitted.paper.number, 2);
 });
+
+test("both timed modes accept confirmed scores and settle without batch recognition", async () => {
+  const clock = performance;
+  let now = 0;
+  global.performance = { now: () => now };
+  try {
+    for (const mode of ["timed", "multi"]) {
+      const { id } = await browserGame("start", "POST", mode);
+      await browserGame(`${id}/submit`, "POST", "1,0");
+      await browserGame(`${id}/submit`, "POST", "2,80");
+      now += 120000;
+      const result = await browserGame(`${id}/results`, "GET");
+      assert.deepEqual(result.grades.map(grade => grade.entered), [0, 80]);
+    }
+  } finally {
+    global.performance = clock;
+  }
+});

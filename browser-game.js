@@ -122,7 +122,11 @@ const browserGame = (() => {
     }
     if (action === "results") {
       if (round.finished) return results();
-      if (remainingMs === 0) return { recognitionRequired: true };
+      if (remainingMs === 0) {
+        if (round.grades.some(grade => grade.entered === null)) return { recognitionRequired: true };
+        round.finished = true;
+        return results();
+      }
       if (round.practice) throw new Error("請先結束練習");
       return { remainingMs };
     }
@@ -166,7 +170,6 @@ const browserGame = (() => {
     }
 
     if (action !== "submit" || method !== "POST") throw new Error("找不到此操作。");
-    if (!round.practice) throw new Error("計時模式會在結束後統一辨識。");
     if (!/^[1-9][0-9]*,(?:100|[1-9]0|0)$/.test(body)) throw new Error("請填入 0 到 100、10 的倍數分數。");
     if (round.finished || remainingMs === 0) return { finished: true, result: results() };
     const [number, entered] = body.split(",").map(Number);

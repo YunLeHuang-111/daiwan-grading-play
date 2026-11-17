@@ -34,10 +34,11 @@ let activePointer;
 let stylusTouchId = null;
 let tool = "pen";
 const practiceFinish = get("finish-practice");
-const practiceCheck = get("check-practice-score");
+const recognizeScore = get("recognize-score");
+const scoreButtons = get("score-buttons");
+let manualScore = false;
 const reviewedPapers = new Map();
 const submittedPapers = new Map();
-let pendingRecognitions = [];
 const reviewResize = new ResizeObserver(entries => {
   for (const { target } of entries) fitReviewPaper(target);
 });
@@ -74,15 +75,14 @@ function resetScoreRecognition(text) {
   recognitionPending = false;
   scoreInkRevision++;
   setGrade(null);
-  setRecognitionStatus(text || (round?.practice ?
-    "完成批改後按「下一張」，系統會立即辨識。" :
-    "完成批改後按「下一張」收卷；時間結束後統一辨識。"));
+  setRecognitionStatus(text || "請點選分數，或手寫後點「辨識手寫分數」。");
 }
 
 function invalidateScoreRecognition(text = "筆跡已更新，請重新辨識分數。") {
   recognitionRequest++;
   recognitionPending = false;
   scoreInkRevision++;
+  if (manualScore) return;
   setGrade(null);
   if (phase === "playing") setRecognitionStatus(text);
 }
@@ -187,11 +187,15 @@ function setLayout(usePhoneLayout) {
   }
 }
 
-function setGrade(value) {
+function setGrade(value, manual = false) {
+  manualScore = manual;
   if (value !== null && !ScoreRoi.isAllowedScore(value)) value = null;
   selectedScore = value;
   get("score-preview").textContent = value ?? "—";
-  get("score-source").textContent = value === null ? "尚未辨識" : "CNN 自動辨識";
+  get("score-source").textContent = value === null ? "尚未選分" : manual ? "按鈕選分" : "手寫辨識";
+  for (const button of scoreButtons.querySelectorAll("[data-score]")) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.score) === value));
+  }
   if (phase) updateControls();
 }
 
@@ -212,10 +216,11 @@ function updateControls() {
   for (const button of [...modeButtons, ...layoutButtons]) button.disabled = !canChoose;
   get("restart").disabled = start.disabled = !canChoose;
   get("pen-tool").disabled = get("eraser-tool").disabled = !editable;
-  submit.disabled = !editable || recognitionPending || (round?.practice && !modelAvailable);
+  submit.disabled = !editable || recognitionPending;
   rewriteScore.disabled = !editable;
   practiceFinish.disabled = !editable;
-  practiceCheck.disabled = !editable || recognitionPending || !modelAvailable || !round?.practice;
+  recognizeScore.disabled = !editable || recognitionPending || !modelAvailable;
+  scoreButtons.disabled = !editable;
   get("undo").disabled = !editable || strokes.length === 0;
   get("clear").disabled = !editable || strokes.length === 0;
 }
@@ -255,11 +260,10 @@ async function startRound(mode) {
     renderRoute();
     get("clock-digits").toggleAttribute("hidden", round.practice);
     get("time-bar").hidden = get("clock").hidden = round.practice;
-    get("practice-clock").hidden = practiceFinish.hidden = practiceCheck.hidden = !round.practice;
+    get("practice-clock").hidden = practiceFinish.hidden = !round.practice;
     get("time-bar").max = round.mode === "multi" ? 120000 : 60000;
     get("clock-card").classList.remove("urgent");
     submittedPapers.clear();
-    pendingRecognitions = [];
     deadline = round.practice ? null : performance.now() + round.remainingMs;
     get("start-panel").hidden = true;
     ink.hidden = false;
@@ -311,13 +315,13 @@ function recognitionFailureReason(result) {
   return `無法確認辨識結果（階段：${info.stage || "unknown"}，狀態：${result?.status || "unknown"}）`;
 }
 
-async function recognizeCurrentScore({ previewOnly = false } = {}) {
+async function recognizeCurrentScore() {
   if (phase !== "playing" || recognitionPending || !modelAvailable) return null;
   const request = ++recognitionRequest;
   const recognitionSnapshot = { request, revision: scoreInkRevision, paperNumber: paper.number };
   recognitionPending = true;
   setGrade(null);
-  setRecognitionStatus(previewOnly ? "正在檢查目前練習考卷…" : "批改完成，正在自動辨識總分…");
+  setRecognitionStatus("正在辨識手寫分數…");
   updateControls();
   let result;
   try {
@@ -345,7 +349,7 @@ async function recognizeCurrentScore({ previewOnly = false } = {}) {
   }
   const detail = recognitionFailureReason(result);
   console.warn("[score-recognition] 辨識失敗", { paperNumber: paper.number, status: result.status, diagnostic: result.diagnostic });
-  setRecognitionStatus(`失敗原因：${detail}。請在右上角重寫 0、10、20…100 後再試一次。`);
+  setRecognitionStatus(`失敗原因：${detail}。可重寫後再試，或直接點選分數。`);
   message("分數辨識失敗，考卷尚未交件。");
   updateControls();
   return null;
@@ -358,17 +362,10 @@ get("grade-form").addEventListener("submit", async event => {
     finish();
     return;
   }
-  let score = null;
-  let captured = null;
-  if (round.practice) {
-    score = await recognizeCurrentScore();
-    if (score === null) return;
-    if (deadline !== null && performance.now() >= deadline) {
-      finish();
-      return;
-    }
-  } else {
-    captured = scoreRecognizer.capture({ inkCanvas: ink, scoreZone });
+  const score = selectedScore;
+  if (score === null) {
+    message("請先點選或辨識分數，確認後再交卷。");
+    return;
   }
 
   recognitionRequest++;
@@ -378,14 +375,11 @@ get("grade-form").addEventListener("submit", async event => {
   try {
     const paperNumber = paper.number;
     rememberPaper();
-    const data = round.practice ?
-      await api(`${round.id}/submit`, "POST", `${paperNumber},${score}`) :
-      await api(`${round.id}/defer`, "POST", String(paperNumber));
+    const data = await api(`${round.id}/submit`, "POST", `${paperNumber},${score}`);
     if (data.finished) {
-      finish();
+      showResults(data.result);
       return;
     }
-    if (!round.practice) pendingRecognitions.push({ number: paperNumber, captured });
     if (!round.practice) deadline = performance.now() + data.remainingMs;
     get("count").textContent = String(data.count).padStart(2, "0");
     if (data.subject !== round.subject) {
@@ -395,7 +389,6 @@ get("grade-form").addEventListener("submit", async event => {
       renderKey();
     }
     renderPaper(data.paper);
-    if (!round.practice) setRecognitionStatus(`已收第 ${paperNumber} 張；時間結束後統一辨識。`);
     const sheet = get("student-sheet");
     if (sheet.getBoundingClientRect().top < 0) {
       sheet.scrollIntoView({ block: "start" });
@@ -410,29 +403,12 @@ get("grade-form").addEventListener("submit", async event => {
 
 async function finish() {
   recognitionRequest++;
-  recognitionPending = !round.practice;
+  recognitionPending = false;
   phase = "finishing";
   updateControls();
   try {
-    let data;
-    if (round.practice) {
-      data = await api(`${round.id}/finish`, "POST");
-    } else {
-      clearInterval(timer);
-      const recognized = [];
-      for (let index = 0; index < pendingRecognitions.length; index++) {
-        const pending = pendingRecognitions[index];
-        setRecognitionStatus(`正在統一辨識第 ${index + 1}／${pendingRecognitions.length} 張…`);
-        const result = await scoreRecognizer.recognizeCapture(pending.captured);
-        const failureReason = result.status === "ok" ? null : recognitionFailureReason(result).slice(0, 300);
-        if (failureReason) {
-          console.warn("[score-recognition] 批次辨識失敗", { paperNumber: pending.number, status: result.status, diagnostic: result.diagnostic });
-        }
-        recognized.push({ number: pending.number, score: result.status === "ok" ? result.score : null, failureReason });
-      }
-      data = await api(`${round.id}/recognize`, "POST", JSON.stringify(recognized));
-      recognitionPending = false;
-    }
+    const data = round.practice ? await api(`${round.id}/finish`, "POST") :
+      await api(`${round.id}/results`);
     if (data.remainingMs !== undefined) {
       deadline = performance.now() + data.remainingMs;
       phase = "playing";
@@ -969,7 +945,16 @@ for (const button of layoutButtons) {
 }
 setLayout(matchMedia("(max-width: 680px), (max-height: 500px) and (pointer: coarse)").matches);
 rewriteScore.addEventListener("click", clearScoreInk);
-practiceCheck.addEventListener("click", () => recognizeCurrentScore({ previewOnly: true }));
+recognizeScore.addEventListener("click", recognizeCurrentScore);
+scoreButtons.addEventListener("click", event => {
+  const button = event.target.closest("[data-score]");
+  if (!button || phase !== "playing") return;
+  recognitionRequest++;
+  recognitionPending = false;
+  setGrade(Number(button.dataset.score), true);
+  setRecognitionStatus("已選分數，確認後按「下一張」。");
+  message();
+});
 
 async function preloadScoreModel() {
   const status = get("model-status");
@@ -982,7 +967,7 @@ async function preloadScoreModel() {
     modelAvailable = false;
     status.textContent = "CNN 不可用・辨識可能失敗";
     status.className = "model-status unavailable";
-    setRecognitionStatus("模型載入失敗，請重新整理頁面後再試。");
+    setRecognitionStatus("模型載入失敗，仍可點選分數交卷。");
   }
   updateControls();
 }

@@ -16,13 +16,13 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="木桌上的直式考卷和紅筆，旁邊寫著呆丸國中・段考閱卷室與老師，我幾分！">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="./style.css?v=score-cnn-13">
+  <link rel="stylesheet" href="./style.css?v=confirm-score-1">
   <script src="./score-roi.js?v=score-cnn-13" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js" defer></script>
   <script src="./score-recognizer.js?v=score-cnn-13" defer></script>
   <script src="./achievements.js?v=three-modes" defer></script>
-  <script src="./browser-game.js?v=batch-recognition-2" defer></script>
-  <script src="./game.js?v=score-cnn-13" defer></script>
+  <script src="./browser-game.js?v=confirm-score-1" defer></script>
+  <script src="./game.js?v=confirm-score-1" defer></script>
 </head>
 <body>
   <main class="desk" id="game-page">
@@ -64,30 +64,45 @@
           <button type="button" id="clear" aria-label="清除全部筆跡" disabled>清除</button>
         </div>
         <span class="grading-count">已改 <strong id="count">00</strong> 張</span>
-        <button type="button" class="desk-button" id="check-practice-score" hidden>檢查目前練習考卷分數</button>
+
         <button type="button" class="desk-button" id="finish-practice" hidden>結束練習</button>
       </div>
       <div class="grading-body">
         <div class="score-controls">
           <span class="calculator-label" id="score-label">送出分數</span>
           <div class="score-screen" id="score-preview" role="status" aria-labelledby="score-label">—</div>
-          <small id="score-source">尚未辨識</small>
+          <small id="score-source">尚未選分</small>
         </div>
         <div class="recognition-controls">
           <div class="recognition-heading">
             <strong>手寫 CNN 辨識</strong>
             <span id="model-status" class="model-status" aria-live="polite">模型載入中…</span>
           </div>
-          <p id="recognition-status" aria-live="polite">完成批改後按「下一張」收卷。</p>
+          <p id="recognition-status" aria-live="polite">請點選分數或辨識手寫分數。</p>
           <div class="recognition-actions">
+            <button type="button" id="recognize-score" class="desk-button" disabled>辨識手寫分數</button>
             <button type="button" id="rewrite-score" class="desk-button" disabled>重新寫分數</button>
           </div>
+          <fieldset id="score-buttons" class="keypad" disabled>
+            <legend class="visually-hidden">直接選分</legend>
+            <button type="button" data-score="0" aria-pressed="false">0</button>
+            <button type="button" data-score="10" aria-pressed="false">10</button>
+            <button type="button" data-score="20" aria-pressed="false">20</button>
+            <button type="button" data-score="30" aria-pressed="false">30</button>
+            <button type="button" data-score="40" aria-pressed="false">40</button>
+            <button type="button" data-score="50" aria-pressed="false">50</button>
+            <button type="button" data-score="60" aria-pressed="false">60</button>
+            <button type="button" data-score="70" aria-pressed="false">70</button>
+            <button type="button" data-score="80" aria-pressed="false">80</button>
+            <button type="button" data-score="90" aria-pressed="false">90</button>
+            <button type="button" data-score="100" aria-pressed="false">100</button>
+          </fieldset>
         </div>
         <nav class="paper-links" aria-label="跳到考卷">
           <a href="#student-sheet">學生考卷</a>
           <a href="#key-sheet">答案卷</a>
         </nav>
-        <button type="submit" form="grade-form" class="primary" id="submit" aria-label="完成批改、辨識分數並換下一張" disabled>下一張 <span aria-hidden="true">→</span></button>
+        <button type="submit" form="grade-form" class="primary" id="submit" aria-label="確認分數並換下一張" disabled>下一張 <span aria-hidden="true">→</span></button>
       </div>
       <p class="message" id="message" role="status" hidden></p>
     </aside>
@@ -154,7 +169,7 @@
     <ol class="tutorial-steps">
       <li><strong>對答案</strong><span>按題號比對標準答案的紅字與學生作答的藍字。多科和練習模式交卷後會換科。</span></li>
       <li><strong>畫紅筆</strong><span>在學生的作答上畫記，畫錯了可以用橡皮擦。</span></li>
-      <li><strong>給分交卷</strong><span>右上角寫完整總分 0、10…100。練習模式立即辨識；單科／多科先收卷，倒數結束後統一辨識。</span></li>
+      <li><strong>給分交卷</strong><span>每題 10 分。可直接點選總分，或在考卷右上角手寫總分，再點「辨識手寫分數」。確認「送出分數」後，按「下一張」交卷。</span></li>
     </ol>
     <p class="tutorial-modes">單科 1 分鐘，多科 2 分鐘且每張換科，練習不限時且每張換科。若畫面放大，用兩指向內捏合即可縮回。</p>
     <form method="dialog" class="tutorial-actions">
